@@ -1,0 +1,7 @@
+unmatchedSuppression
+missingIncludeSystem
+unusedFunction
+useStlAlgorithm
+noExplicitConstructor
+unusedStructMember
+*:*_deps/*

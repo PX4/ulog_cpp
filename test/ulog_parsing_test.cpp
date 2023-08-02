@@ -5,12 +5,11 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
-#include <vector>
-
 #include <ulog_cpp/data_container.hpp>
 #include <ulog_cpp/reader.hpp>
 #include <ulog_cpp/simple_writer.hpp>
 #include <ulog_cpp/writer.hpp>
+#include <vector>
 
 class TestWriter : public ulog_cpp::Writer {
  public:

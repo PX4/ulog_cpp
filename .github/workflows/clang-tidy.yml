@@ -1,0 +1,27 @@
+name: clang-tidy
+on:
+  push:
+    branches:
+    - 'main'
+    - 'release/*'
+  pull_request:
+    branches:
+    - '**'
+
+jobs:
+  clang_tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Setup python
+        uses: actions/setup-python@v4
+
+      - name: Run clang-tidy
+        run: |
+          mkdir build
+          cmake -B build
+          make -C build clang-tidy

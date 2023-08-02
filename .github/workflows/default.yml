@@ -1,0 +1,51 @@
+name: CI
+on:
+  push:
+    branches:
+    - 'main'
+    - 'release/*'
+  pull_request:
+    branches:
+    - '**'
+
+jobs:
+  build_and_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Setup python
+        uses: actions/setup-python@v4
+
+      - name: Install deps
+        run: sudo apt install cppcheck ccache
+
+      - uses: actions/cache@v3.3.1
+        id: ccache-persistence
+        with:
+          path: ~/.ccache
+          key: ccache-ccpp
+          restore-keys: |
+            ccache-ccpp
+      - name: setup ccache
+        run: mkdir -p ~/.ccache && echo "max_size = 300M" > ~/.ccache/ccache.conf && ccache -z && ccache -s
+
+      - name: Build
+        run: |
+          mkdir build
+          cmake -B build
+          make -C build -j2
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.0
+
+      - name: Run tests
+        run: |
+          make -C build run-unit-tests
+
+      - name: ccache post-run
+        run: ccache -s && ccache -z
+

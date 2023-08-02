@@ -8,10 +8,9 @@
 #include <iostream>
 #include <numeric>
 #include <string>
+#include <ulog_cpp/data_container.hpp>
+#include <ulog_cpp/reader.hpp>
 #include <variant>
-
-#include "data_container.hpp"
-#include "reader.hpp"
 
 int main(int argc, char** argv)
 {

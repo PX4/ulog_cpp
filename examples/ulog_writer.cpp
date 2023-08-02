@@ -7,8 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <thread>
-
-#include "simple_writer.hpp"
+#include <ulog_cpp/simple_writer.hpp>
 
 using namespace std::chrono_literals;
 
