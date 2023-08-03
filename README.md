@@ -4,7 +4,7 @@ Streamed C++ [ULog](https://docs.px4.io/main/en/dev_log/ulog_file_format.html) r
 
 ## Properties
 - Options for keeping log data in memory or processing immediately.
-- Pure C++17 without additional dependencies (`SimpleWriter` requires POSIX for file IO).
+- Pure C++17 without additional dependencies (`SimpleWriter` requires platform-specific `fsync`/`FlushFileBuffers`).
 - The reader is ~10 times as fast compared to the [python implementation](https://github.com/PX4/pyulog).
   However, the API is more low-level, and if you're just looking for an easy-to-use parsing library, use pyulog.
 - Unsupported ULog features:
