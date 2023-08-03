@@ -5,7 +5,11 @@
 
 #include "simple_writer.hpp"
 
+#ifdef WINDOWS
+#include <fileapi.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace ulog_cpp {
 
@@ -108,7 +112,11 @@ void SimpleWriter::fsync()
 {
   if (_file) {
     fflush(_file);
+#ifdef WINDOWS
+    FlushFileBuffers(static_cast<HANDLE>(_fileno(_file)));
+#else
     ::fsync(fileno(_file));
+#endif
   }
 }
 uint16_t SimpleWriter::writeAddLoggedMessage(const std::string& message_format_name,
