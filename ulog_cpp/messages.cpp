@@ -7,6 +7,7 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <utility>
 
 #define CHECK_MSG_SIZE(size, min_required) \
@@ -83,95 +84,248 @@ Field::Field(const char* str, int len)
     throw ParsingException("Invalid key format");
   }
   const std::string_view key_array = key_value.substr(0, first_space);
-  name = key_value.substr(first_space + 1);
+  _name = key_value.substr(first_space + 1);
   // Check for arrays
   const std::string::size_type bracket = key_array.find('[');
+  std::string type_name;
   if (bracket == std::string::npos) {
-    type = key_array;
+    type_name = key_array;
   } else {
-    type = key_array.substr(0, bracket);
+    type_name = key_array.substr(0, bracket);
     if (key_array[key_array.length() - 1] != ']') {
       throw ParsingException("Invalid key format (missing ])");
     }
-    array_length = std::stoi(std::string(key_array.substr(bracket + 1)));
+    _array_length = std::stoi(std::string(key_array.substr(bracket + 1)));
+  }
+  auto it_basic = kBasicTypes.find(type_name);
+  if (it_basic != kBasicTypes.end()) {
+    _type = it_basic->second;
+  } else {
+    // Assume this is a recursive type (unresolved at this point)
+    _type = {type_name, Field::BasicType::NESTED, 0};
   }
 }
 
-const std::map<std::string, int> Field::kBasicTypes{
-    {"int8_t", 1},  {"uint8_t", 1},  {"int16_t", 2}, {"uint16_t", 2},
-    {"int32_t", 4}, {"uint32_t", 4}, {"int64_t", 8}, {"uint64_t", 8},
-    {"float", 4},   {"double", 8},   {"bool", 1},    {"char", 1}};
+void Field::resolveDefinition(
+    const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats, int offset)
+{
+  // if this is already resolved, do nothing
+  if (definitionResolved()) {
+    return;
+  }
+
+  _offset_in_message_bytes = offset;
+  // if this is a basic type, we are done
+  if (_type.type != Field::BasicType::NESTED) {
+    return;
+  }
+
+  auto it = existing_formats.find(_type.name);
+  if (it == existing_formats.end()) {
+    throw ParsingException("Message format not found: " + _type.name);
+  }
+  _type.nested_message = it->second;
+  // recursively resolve nested type
+  _type.nested_message->resolveDefinition(existing_formats);
+  _type.size = _type.nested_message->sizeBytes();
+}
+
+void Field::resolveDefinition(int offset)
+{
+  if (definitionResolved()) {
+    return;
+  }
+
+  if (_type.type == Field::BasicType::NESTED) {
+    throw ParsingException("Nested type not resolved");
+  }
+  _offset_in_message_bytes = offset;
+}
+
+const std::map<std::string, Field::TypeAttributes> Field::kBasicTypes{
+    {"int8_t", {"int8_t", Field::BasicType::INT8, 1}},
+    {"uint8_t", {"uint8_t", Field::BasicType::UINT8, 1}},
+    {"int16_t", {"int16_t", Field::BasicType::INT16, 2}},
+    {"uint16_t", {"uint16_t", Field::BasicType::UINT16, 2}},
+    {"int32_t", {"int32_t", Field::BasicType::INT32, 4}},
+    {"uint32_t", {"uint32_t", Field::BasicType::UINT32, 4}},
+    {"int64_t", {"int64_t", Field::BasicType::INT64, 8}},
+    {"uint64_t", {"uint64_t", Field::BasicType::UINT64, 8}},
+    {"float", {"float", Field::BasicType::FLOAT, 4}},
+    {"double", {"double", Field::BasicType::DOUBLE, 8}},
+    {"bool", {"bool", Field::BasicType::BOOL, 1}},
+    {"char", {"char", Field::BasicType::CHAR, 1}}};
+
+int Field::sizeBytes() const
+{
+  if (!definitionResolved()) {
+    throw ParsingException("Unresolved type " + _type.name);
+  }
+  return _type.size * ((_array_length == -1) ? 1 : _array_length);
+}
 
 std::string Field::encode() const
 {
-  if (array_length >= 0) {
-    return type + '[' + std::to_string(array_length) + ']' + ' ' + name;
+  if (_array_length >= 0) {
+    return _type.name + '[' + std::to_string(_array_length) + ']' + ' ' + _name;
   }
-  return type + ' ' + name;
+  return _type.name + ' ' + _name;
 }
-Value::Value(const Field& field, const std::vector<uint8_t>& value)
+Value::NativeTypeVariant Value::asNativeTypeVariant() const
 {
-  if (field.array_length == -1 && field.type == "int8_t") {
-    assign<int8_t>(value);
-  } else if (field.array_length == -1 && field.type == "uint8_t") {
-    assign<uint8_t>(value);
-  } else if (field.array_length == -1 && field.type == "int16_t") {
-    assign<int16_t>(value);
-  } else if (field.array_length == -1 && field.type == "uint16_t") {
-    assign<uint16_t>(value);
-  } else if (field.array_length == -1 && field.type == "int32_t") {
-    assign<int32_t>(value);
-  } else if (field.array_length == -1 && field.type == "uint32_t") {
-    assign<uint32_t>(value);
-  } else if (field.array_length == -1 && field.type == "int64_t") {
-    assign<int64_t>(value);
-  } else if (field.array_length == -1 && field.type == "uint64_t") {
-    assign<uint64_t>(value);
-  } else if (field.array_length == -1 && field.type == "float") {
-    assign<float>(value);
-  } else if (field.array_length == -1 && field.type == "double") {
-    assign<double>(value);
-  } else if (field.array_length == -1 && field.type == "bool") {
-    assign<bool>(value);
-  } else if (field.array_length == -1 && field.type == "char") {
-    assign<char>(value);
-  } else if (field.array_length > 0 && field.type == "char") {
-    _value = std::string(reinterpret_cast<const char*>(value.data()), value.size());
+  if (_array_index >= 0 && _field_ref.arrayLength() < 0) {
+    throw ParsingException("Can not access array element of non-array field");
+  }
+
+  if (_field_ref.arrayLength() == -1 || _array_index >= 0) {
+    // decode as a single value. Either it is a single value,
+    // or the user has explicitly selected an array element
+    int array_offset = _array_index >= 0 ? _array_index : 0;
+    switch (_field_ref.type().type) {
+      case Field::BasicType::INT8:
+        return deserialize<int8_t>(_backing_ref_begin, _backing_ref_end,
+                                   _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::UINT8:
+        return deserialize<uint8_t>(_backing_ref_begin, _backing_ref_end,
+                                    _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::INT16:
+        return deserialize<int16_t>(_backing_ref_begin, _backing_ref_end,
+                                    _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::UINT16:
+        return deserialize<uint16_t>(_backing_ref_begin, _backing_ref_end,
+                                     _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::INT32:
+        return deserialize<int32_t>(_backing_ref_begin, _backing_ref_end,
+                                    _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::UINT32:
+        return deserialize<uint32_t>(_backing_ref_begin, _backing_ref_end,
+                                     _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::INT64:
+        return deserialize<int64_t>(_backing_ref_begin, _backing_ref_end,
+                                    _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::UINT64:
+        return deserialize<uint64_t>(_backing_ref_begin, _backing_ref_end,
+                                     _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::FLOAT:
+        return deserialize<float>(_backing_ref_begin, _backing_ref_end,
+                                  _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::DOUBLE:
+        return deserialize<double>(_backing_ref_begin, _backing_ref_end,
+                                   _field_ref.offsetInMessage(), array_offset);
+      case Field::BasicType::BOOL:
+        return deserialize<bool>(_backing_ref_begin, _backing_ref_end, _field_ref.offsetInMessage(),
+                                 array_offset);
+      case Field::BasicType::CHAR:
+        return deserialize<char>(_backing_ref_begin, _backing_ref_end, _field_ref.offsetInMessage(),
+                                 array_offset);
+      case Field::BasicType::NESTED:
+        throw ParsingException("Can't get nested field as basic type. Field " + _field_ref.name());
+    }
   } else {
-    _value = value;
+    // decode as an array
+    switch (_field_ref.type().type) {
+      case Field::BasicType::INT8:
+        return deserializeVector<int8_t>(_backing_ref_begin, _backing_ref_end,
+                                         _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::UINT8:
+        return deserializeVector<uint8_t>(_backing_ref_begin, _backing_ref_end,
+                                          _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::INT16:
+        return deserializeVector<int16_t>(_backing_ref_begin, _backing_ref_end,
+                                          _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::UINT16:
+        return deserializeVector<uint16_t>(_backing_ref_begin, _backing_ref_end,
+                                           _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::INT32:
+        return deserializeVector<int32_t>(_backing_ref_begin, _backing_ref_end,
+                                          _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::UINT32:
+        return deserializeVector<uint32_t>(_backing_ref_begin, _backing_ref_end,
+                                           _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::INT64:
+        return deserializeVector<int64_t>(_backing_ref_begin, _backing_ref_end,
+                                          _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::UINT64:
+        return deserializeVector<uint64_t>(_backing_ref_begin, _backing_ref_end,
+                                           _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::FLOAT:
+        return deserializeVector<float>(_backing_ref_begin, _backing_ref_end,
+                                        _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::DOUBLE:
+        return deserializeVector<double>(_backing_ref_begin, _backing_ref_end,
+                                         _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::BOOL:
+        return deserializeVector<bool>(_backing_ref_begin, _backing_ref_end,
+                                       _field_ref.offsetInMessage(), _field_ref.arrayLength());
+      case Field::BasicType::CHAR:
+        if (_backing_ref_end - _backing_ref_begin < _field_ref.arrayLength()) {
+          throw ParsingException("Decoding fault, memory too short");
+        }
+        return std::string(_backing_ref_begin, _backing_ref_begin + _field_ref.arrayLength());
+      case Field::BasicType::NESTED:
+        throw ParsingException("Can't get nested field as basic type. Field " + _field_ref.name());
+    }
   }
+  return deserialize<uint8_t>(_backing_ref_begin, _backing_ref_end, _field_ref.offsetInMessage(),
+                              0);
 }
-template <typename T>
-void Value::assign(const std::vector<uint8_t>& value)
+
+Value Value::operator[](const Field& field) const
 {
-  T v;
-  if (value.size() != sizeof(v)) throw ParsingException("Unexpected data type size");
-  memcpy(&v, value.data(), sizeof(v));
-  _value = v;
+  if (_field_ref.type().type != Field::BasicType::NESTED) {
+    throw ParsingException("Cannot access field of non-nested type");
+  }
+  if (!_field_ref.definitionResolved()) {
+    throw ParsingException("Cannot access field of unresolved type");
+  }
+  int submessage_offset = _field_ref.offsetInMessage() +
+                          ((_array_index >= 0) ? _field_ref.type().size * _array_index : 0);
+
+  return Value(field, _backing_ref_begin + submessage_offset, _backing_ref_end);
 }
+
+Value Value::operator[](const std::string& field_name) const
+{
+  if (_field_ref.type().type != Field::BasicType::NESTED) {
+    throw ParsingException("Cannot access field of non-nested type");
+  }
+  if (!_field_ref.definitionResolved()) {
+    throw ParsingException("Cannot access field of unresolved type");
+  }
+  const auto& field = _field_ref.type().nested_message->field(field_name);
+  return operator[](*field);
+}
+
+Value Value::operator[](size_t index) const
+{
+  if (_field_ref.arrayLength() < 0) {
+    throw ParsingException("Cannot access field of non-array type");
+  }
+  if (index >= static_cast<size_t>(_field_ref.arrayLength())) {
+    throw ParsingException("Index out of bounds");
+  }
+  return Value(_field_ref, _backing_ref_begin, _backing_ref_end, index);
+}
+
 MessageInfo::MessageInfo(Field field, std::vector<uint8_t> value, bool is_multi, bool continued)
     : _field(std::move(field)), _value(std::move(value)), _continued(continued), _is_multi(is_multi)
 {
 }
 MessageInfo::MessageInfo(const std::string& key, int32_t value)
 {
-  _field.name = key;
-  _field.type = "int32_t";
+  _field = {"int32_t", key};
   _value.resize(sizeof(value));
   memcpy(_value.data(), &value, sizeof(value));
 }
 MessageInfo::MessageInfo(const std::string& key, float value)
 {
-  _field.name = key;
-  _field.type = "float";
+  _field = {"float", key};
   _value.resize(sizeof(value));
   memcpy(_value.data(), &value, sizeof(value));
 }
 MessageInfo::MessageInfo(const std::string& key, const std::string& value)
 {
-  _field.name = key;
-  _field.type = "char";
-  _field.array_length = value.length();
+  _field = {"char", key, static_cast<int>(value.length())};
   _value.resize(value.length());
   memcpy(_value.data(), value.data(), value.length());
 }
@@ -224,20 +378,49 @@ MessageFormat::MessageFormat(const uint8_t* msg)
     if (semicolon == std::string::npos) {
       throw ParsingException("Invalid message format (no ;)");  // invalid
     }
-    _fields.emplace_back(format_str.data(), semicolon);
+    auto f = std::make_shared<Field>(format_str.data(), static_cast<int>(semicolon));
+    _fields.insert({f->name(), f});
+    _fields_ordered.push_back(f);
     format_str = format_str.substr(semicolon + 1);
   }
 }
-MessageFormat::MessageFormat(std::string name, std::vector<Field> fields)
-    : _name(std::move(name)), _fields(std::move(fields))
+MessageFormat::MessageFormat(std::string name, const std::vector<Field>& fields)
+    : _name(std::move(name))
 {
+  for (const auto& field : fields) {
+    auto f = std::make_shared<Field>(field);
+    _fields.insert({f->name(), f});
+    _fields_ordered.push_back(f);
+  }
 }
+
+int MessageFormat::sizeBytes() const
+{
+  int size = 0;
+  for (const auto& it : _fields) {
+    size += it.second->sizeBytes();
+  }
+  return size;
+}
+
+void MessageFormat::resolveDefinition(
+    const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats) const
+{
+  int offset = 0;
+  for (const auto& field : _fields_ordered) {
+    if (!field->definitionResolved()) {
+      field->resolveDefinition(existing_formats, offset);
+    }
+    offset += field->sizeBytes();
+  }
+}
+
 void MessageFormat::serialize(const DataWriteCB& writer) const
 {
   std::string format_str = _name + ':';
 
-  for (const auto& field : _fields) {
-    format_str += field.encode() + ';';
+  for (const auto& field : _fields_ordered) {
+    format_str += field->encode() + ';';
   }
 
   ulog_message_format_s format;

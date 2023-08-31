@@ -44,26 +44,54 @@ int main(int argc, char** argv)
   }
 
   // Read out some data
-  // TODO: create a simpler API for this
-  const std::string message = "multirotor_motor_limits";
-  printf("%s timestamps: ", message.c_str());
-  for (const auto& sub : data_container->subscriptions()) {
-    if (sub.second.add_logged_message.messageName() == message) {
-      const auto& fields = data_container->messageFormats().at(message).fields();
-      // Expect the first field to be the timestamp
-      if (fields[0].name != "timestamp") {
-        printf("Error: first field is not 'timestamp'\n");
-        return -1;
-      }
-      for (const auto& data : sub.second.data) {
-        auto value = ulog_cpp::Value(
-            fields[0],
-            std::vector<uint8_t>(data.data().begin(), data.data().begin() + sizeof(uint64_t)));
-        printf("%lu, ", std::get<uint64_t>(value.data()));
-      }
-    }
-  }
-  printf("\n");
 
+  // List all subscription names
+  for (const auto& sub : data_container->subscriptionNames()) {
+    std::cout << sub << std::endl;
+  }
+
+  // Get a particular subscription
+  const auto& subscription = data_container->subscription("vehicle_status");
+
+  // Get message format of subscription
+  auto message_format = subscription->format();
+  std::cout << "Message format: " << message_format->name() << std::endl;
+
+  // List all field names
+  for (const std::string& field : subscription->fieldNames()) {
+    std::cout << field << std::endl;
+  }
+
+  // Get particular field
+  auto nav_state_field = subscription->field("nav_state");
+
+  // Iterate over all samples
+  for (const auto& sample : *subscription) {
+    // always correctly extracts the type as defined in the message definition,
+    // gets cast to the value you put in int.
+    // This also works for arrays and strings.
+    auto nav_state = sample[nav_state_field].as<int>();
+    std::cout << nav_state << std::endl;
+  }
+
+  // get a specific sample
+  auto sample_12 = subscription->at(12);
+
+  // access values by name
+  auto timestamp = sample_12["timestamp"].as<uint64_t>();
+
+  std::cout << timestamp << std::endl;
+
+  // get from nested data type
+  auto esc_format =
+      data_container->messageFormats().at("esc_status")->field("esc")->type().nested_message;
+  for (const auto& field_name : esc_format->fieldNames()) {
+    std::cout << field_name << std::endl;
+  }
+
+  auto esc_status = data_container->subscription("esc_status");
+  for (const auto& sample : *esc_status) {
+    std::cout << "timestamp: " << sample["esc"][7]["esc_power"].as<int>() << std::endl;
+  }
   return 0;
 }

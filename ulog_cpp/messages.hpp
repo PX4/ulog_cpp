@@ -9,6 +9,7 @@
 #include <exception>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -46,42 +47,224 @@ class FileHeader {
   bool _has_flag_bits{true};
 };
 
-struct Field {
+class MessageFormat;  // forward declaration
+
+class Field {
+ public:
+  enum class BasicType {
+    INT8,
+    UINT8,
+    INT16,
+    UINT16,
+    INT32,
+    UINT32,
+    INT64,
+    UINT64,
+    FLOAT,
+    DOUBLE,
+    CHAR,
+    BOOL,
+    NESTED,
+  };
+
+  struct TypeAttributes {
+    std::string name;
+    BasicType type;
+    int size;
+    std::shared_ptr<MessageFormat> nested_message{nullptr};
+
+    TypeAttributes() = default;
+
+    TypeAttributes(std::string name, BasicType type_, int size_)
+        : name(std::move(name)), type(type_), size(size_), nested_message(nullptr)
+    {
+    }
+  };
+
+  static const std::map<std::string, TypeAttributes> kBasicTypes;
+
   Field() = default;
+
   Field(const char* str, int len);
 
-  static const std::map<std::string, int> kBasicTypes;
-
-  Field(std::string type_str, std::string name_str, int array_length_int = -1)
-      : type(std::move(type_str)), array_length(array_length_int), name(std::move(name_str))
+  Field(const std::string& type_str, std::string name_str, int array_length_int = -1)
+      : _array_length(array_length_int), _name(std::move(name_str))
   {
+    auto it = kBasicTypes.find(type_str);
+    if (it != kBasicTypes.end()) {
+      _type = it->second;
+    } else {
+      // if not a basic type, set it to recursive
+      _type = TypeAttributes(type_str, BasicType::NESTED, 0);
+    }
   }
 
   std::string encode() const;
 
   bool operator==(const Field& field) const
   {
-    return type == field.type && array_length == field.array_length && name == field.name;
+    return _type.name == field._type.name && _array_length == field._array_length &&
+           _name == field._name;
   }
 
-  std::string type;
-  int array_length{-1};  ///< -1 means not-an-array
-  std::string name;
+  inline const TypeAttributes& type() const { return _type; }
+
+  inline int arrayLength() const { return _array_length; }
+
+  inline int offsetInMessage() const { return _offset_in_message_bytes; }
+
+  inline const std::string& name() const { return _name; }
+
+  inline int sizeBytes() const;
+
+  inline bool definitionResolved() const
+  {
+    return _offset_in_message_bytes >= 0 &&
+           (_type.type != BasicType::NESTED || _type.nested_message != nullptr);
+  };
+
+  void resolveDefinition(
+      const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats, int offset);
+
+  void resolveDefinition(int offset);
+
+ private:
+  TypeAttributes _type;
+  int _array_length{-1};  ///< -1 means not-an-array
+  int _offset_in_message_bytes{
+      -1};  ///< default to begin of message. Gets filled on MessageFormat resolution
+  std::string _name;
 };
 
 class Value {
  public:
-  using ValueType =
+  using NativeTypeVariant =
       std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float,
-                   double, bool, char, std::string, std::vector<uint8_t>>;
-  Value(const Field& field, const std::vector<uint8_t>& value);
+                   double, bool, char, std::vector<int8_t>, std::vector<uint8_t>,
+                   std::vector<int16_t>, std::vector<uint16_t>, std::vector<int32_t>,
+                   std::vector<uint32_t>, std::vector<int64_t>, std::vector<uint64_t>,
+                   std::vector<float>, std::vector<double>, std::vector<bool>, std::string>;
 
-  const ValueType& data() const { return _value; }
+  template <typename T>
+  struct is_vector : std::false_type {};
+  template <typename T>
+  struct is_vector<std::vector<T>> : std::true_type {};
+
+  template <typename T>
+  struct is_string : std::is_same<std::decay_t<T>, std::string> {};
+
+  Value(const Field& field_ref, const std::vector<uint8_t>::const_iterator& backing_ref_begin,
+        const std::vector<uint8_t>::const_iterator& backing_ref_end, int array_index = -1)
+      : _field_ref(field_ref),
+        _array_index(array_index),
+        _backing_ref_begin(backing_ref_begin),
+        _backing_ref_end(backing_ref_end)
+  {
+  }
+
+  Value(const Field& field_ref, const std::vector<uint8_t>& backing_ref, int array_index = -1)
+      : Value(field_ref, backing_ref.begin(), backing_ref.end(), array_index)
+  {
+  }
+
+  NativeTypeVariant asNativeTypeVariant() const;
+
+  template <typename T>
+  T as() const
+  {
+    T res;
+    std::visit(
+        [&res](auto&& arg) {
+          using NativeType = std::decay_t<decltype(arg)>;
+          using ReturnType = T;
+          if constexpr (is_string<NativeType>::value || is_string<ReturnType>::value) {
+            // there is a string involved. Only allowed when both are string
+            if constexpr (is_string<NativeType>::value && is_string<ReturnType>::value) {
+              // both are string
+              res = arg;
+            } else {
+              // one is string, the other is not
+              throw ParsingException("Assign strings and non-string types");
+            }
+          } else if constexpr (is_vector<NativeType>::value) {
+            // this is natively a vector
+            if constexpr (is_vector<ReturnType>::value) {
+              // return type is also vector
+              if constexpr (std::is_same<typename NativeType::value_type,
+                                         typename ReturnType::value_type>::value) {
+                // return type is same as native type
+                res = arg;
+              } else {
+                // return type is different from native type, but a vector
+                res.resize(arg.size());
+                for (std::size_t i = 0; i < arg.size(); i++) {
+                  res[i] = static_cast<typename ReturnType::value_type>(arg[i]);
+                }
+              }
+            } else {
+              // return type is not a vector, just return first element
+              if (arg.size() > 0) {
+                res = static_cast<ReturnType>(arg[0]);
+              } else {
+                throw ParsingException("Cannot convert empty vector to non-vector type");
+              }
+            }
+          } else {
+            // this is natively not a vector
+            if constexpr (is_vector<ReturnType>::value) {
+              // return type is a vector
+              res.resize(1);
+              res[0] = static_cast<typename ReturnType::value_type>(arg);
+            } else {
+              // return type is not a vector
+              res = static_cast<ReturnType>(arg);
+            }
+          }
+        },
+        asNativeTypeVariant());
+    return res;
+  }
+
+  // For nested type access
+  Value operator[](const Field& field) const;
+
+  Value operator[](const std::string& field_name) const;
+
+  Value operator[](size_t index) const;
 
  private:
   template <typename T>
-  void assign(const std::vector<uint8_t>& value);
-  ValueType _value;
+  static T deserialize(const std::vector<uint8_t>::const_iterator& backing_start,
+                       const std::vector<uint8_t>::const_iterator& backing_end, int offset,
+                       int array_offset)
+  {
+    T v;
+    int total_offset = offset + array_offset * sizeof(T);
+    if (backing_start > backing_end ||
+        backing_end - backing_start - total_offset < static_cast<int64_t>(sizeof(v))) {
+      throw ParsingException("Unexpected data type size");
+    }
+    std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v), (uint8_t*)&v);
+    return v;
+  }
+
+  template <typename T>
+  static std::vector<T> deserializeVector(const std::vector<uint8_t>::const_iterator& backing_start,
+                                          const std::vector<uint8_t>::const_iterator& backing_end,
+                                          int offset, int size)
+  {
+    std::vector<T> res;
+    res.resize(size);
+    for (int i = 0; i < size; i++) {
+      res[i] = deserialize<T>(backing_start, backing_end, offset, i);
+    }
+    return res;
+  }
+
+  const Field& _field_ref;
+  const int _array_index = -1;
+  const std::vector<uint8_t>::const_iterator _backing_ref_begin;
+  const std::vector<uint8_t>::const_iterator _backing_ref_end;
 };
 
 class MessageInfo {
@@ -96,6 +279,7 @@ class MessageInfo {
   MessageInfo(const std::string& key, float value);
 
   const Field& field() const { return _field; }
+  Field& field() { return _field; }
   std::vector<uint8_t>& valueRaw() { return _value; }
   const std::vector<uint8_t>& valueRaw() const { return _value; }
   Value value() const { return Value(_field, _value); }
@@ -112,7 +296,7 @@ class MessageInfo {
 
  private:
   void initValues(const char* values, int len);
-  Field _field{};
+  Field _field;
   std::vector<uint8_t> _value;
   bool _continued{false};
   bool _is_multi{false};
@@ -122,20 +306,50 @@ class MessageFormat {
  public:
   explicit MessageFormat(const uint8_t* msg);
 
-  explicit MessageFormat(std::string name, std::vector<Field> fields);
+  explicit MessageFormat(std::string name, const std::vector<Field>& fields);
 
   const std::string& name() const { return _name; }
-  const std::vector<Field>& fields() const { return _fields; }
+  const std::map<std::string, std::shared_ptr<Field>>& fieldMap() const { return _fields; }
 
   void serialize(const DataWriteCB& writer) const;
   bool operator==(const MessageFormat& format) const
   {
-    return _name == format._name && _fields == format._fields;
+    if (_name != format._name) {
+      return false;
+    }
+    if (_fields.size() != format._fields.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < _fields_ordered.size(); i++) {
+      if (!(*_fields_ordered[i] == *format._fields_ordered[i])) {
+        return false;
+      }
+    }
+    return true;
   }
+
+  void resolveDefinition(
+      const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats) const;
+
+  int sizeBytes() const;
+
+  std::vector<std::shared_ptr<Field>> fields() const { return _fields_ordered; }
+
+  std::vector<std::string> fieldNames() const
+  {
+    std::vector<std::string> names;
+    for (auto& field : _fields_ordered) {
+      names.push_back(field->name());
+    }
+    return names;
+  }
+
+  std::shared_ptr<Field> field(const std::string& name) const { return _fields.at(name); }
 
  private:
   std::string _name;
-  std::vector<Field> _fields;
+  std::map<std::string, std::shared_ptr<Field>> _fields;
+  std::vector<std::shared_ptr<Field>> _fields_ordered;
 };
 
 using Parameter = MessageInfo;
@@ -148,6 +362,7 @@ class ParameterDefault {
                    ulog_parameter_default_type_t default_types);
 
   const Field& field() const { return _field; }
+  Field& field() { return _field; }
   const std::vector<uint8_t>& valueRaw() const { return _value; }
   Value value() const { return Value(_field, _value); }
 

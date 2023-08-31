@@ -9,7 +9,7 @@
 
 #include "raw_messages.hpp"
 
-#if 0
+#if 1
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF(...)

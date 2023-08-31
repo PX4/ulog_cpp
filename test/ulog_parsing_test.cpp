@@ -80,16 +80,32 @@ TEST_CASE("ULog parsing - basic test: write then read")
   REQUIRE(data_container->parsingErrors().empty());
   REQUIRE_FALSE(data_container->hadFatalError());
 
-  // Compare
+  // Check RAW API
   CHECK_EQ(file_header, data_container->fileHeader());
-  CHECK_EQ(format1, data_container->messageFormats().at("message_name"));
-  CHECK_EQ(format2, data_container->messageFormats().at("other_message"));
+  CHECK_EQ(format1, *(data_container->messageFormats().at("message_name")));
+  CHECK_EQ(format2, *(data_container->messageFormats().at("other_message")));
   CHECK_EQ(info, data_container->messageInfo().at("info"));
   REQUIRE_EQ(data_container->logging().size(), 1);
   CHECK_EQ(logging, data_container->logging()[0]);
-  CHECK_EQ(data_container->subscriptions().at(msg_id).data.size(), 2);
-  CHECK_EQ(data, data_container->subscriptions().at(msg_id).data[0]);
-  CHECK_EQ(data, data_container->subscriptions().at(msg_id).data[1]);
+  CHECK_EQ(data_container->subscriptionsByMessageId().at(msg_id)->rawSamples().size(), 2);
+  CHECK_EQ(data, data_container->subscriptionsByMessageId().at(msg_id)->rawSamples()[0]);
+  CHECK_EQ(data, data_container->subscriptionsByMessageId().at(msg_id)->rawSamples()[1]);
+
+  // Check convenience API
+  CHECK_EQ(format2, *(data_container->subscription("other_message")->format()));
+  CHECK_EQ(data_container->subscription("other_message")->size(), 2);
+
+  auto timestamp_field = data_container->subscription("other_message")->field("timestamp");
+  auto x_field = data_container->subscription("other_message")->field("x");
+
+  for (const auto& sample : *(data_container->subscription("other_message"))) {
+    // field access
+    CHECK_EQ(sample[timestamp_field].as<int>(), 32);
+    CHECK_EQ(sample[x_field].as<int>(), 49);
+    // direct string access
+    CHECK_EQ(sample["timestamp"].as<int>(), 32);
+    CHECK_EQ(sample["x"].as<int>(), 49);
+  }
 }
 
 static void readFileWriteTest(const std::filesystem::path& path,
@@ -227,13 +243,25 @@ TEST_CASE("ULog parsing - test corruption")
 
   // Compare
   CHECK_EQ(file_header, data_container->fileHeader());
-  CHECK_EQ(format2, data_container->messageFormats().at("other_message"));
+  CHECK_EQ(format2, *(data_container->messageFormats().at("other_message")));
   // Here we inserted zero bytes, but the next messages should not be dropped
   REQUIRE_EQ(data_container->logging().size(), 1);
   CHECK_EQ(logging, data_container->logging()[0]);
-  CHECK_EQ(data_container->subscriptions().at(msg_id).data.size(), 2);
-  CHECK_EQ(data, data_container->subscriptions().at(msg_id).data[0]);
-  CHECK_EQ(data, data_container->subscriptions().at(msg_id).data[1]);
+  CHECK_EQ(data_container->subscriptionsByMessageId().at(msg_id)->rawSamples().size(), 2);
+  CHECK_EQ(data, data_container->subscriptionsByMessageId().at(msg_id)->rawSamples()[0]);
+  CHECK_EQ(data, data_container->subscriptionsByMessageId().at(msg_id)->rawSamples()[1]);
+
+  auto timestamp_field = data_container->subscription("other_message")->field("timestamp");
+  auto x_field = data_container->subscription("other_message")->field("x");
+
+  for (const auto& sample : *(data_container->subscription("other_message"))) {
+    // field access
+    CHECK_EQ(sample[timestamp_field].as<int>(), 32);
+    CHECK_EQ(sample[x_field].as<int>(), 49);
+    // direct string access
+    CHECK_EQ(sample["timestamp"].as<int>(), 32);
+    CHECK_EQ(sample["x"].as<int>(), 49);
+  }
 }
 
 struct MyData {
@@ -334,25 +362,30 @@ TEST_CASE("ULog parsing - simple writer")
   REQUIRE_FALSE(data_container->hadFatalError());
 
   // Compare
-  CHECK_EQ(sys_name,
-           std::get<std::string>(data_container->messageInfo().at("sys_name").value().data()));
+  CHECK_EQ(sys_name, data_container->messageInfo().at("sys_name").value().as<std::string>());
   REQUIRE_EQ(data_container->logging().size(), 1);
   CHECK_EQ(text_message, data_container->logging()[0].message());
-  CHECK_EQ(param_a,
-           std::get<float>(data_container->initialParameters().at("PARAM_A").value().data()));
-  CHECK_EQ(param_b,
-           std::get<int32_t>(data_container->initialParameters().at("PARAM_B").value().data()));
+  CHECK_EQ(param_a, data_container->initialParameters().at("PARAM_A").value().as<float>());
+  CHECK_EQ(param_b, (data_container->initialParameters().at("PARAM_B").value().as<int32_t>()));
 
   CHECK_EQ(MyData::messageName(),
-           data_container->messageFormats().at(MyData::messageName()).name());
-  REQUIRE_EQ(data_container->subscriptions().size(), 1);
-  const auto& data_array = data_container->subscriptions().begin()->second.data;
-  REQUIRE_EQ(data_array.size(), written_data_messages.size());
-  for (unsigned i = 0; i < data_array.size(); ++i) {
-    MyData data{};
-    REQUIRE_GE(sizeof(data), data_array[i].data().size());
-    memcpy(&data, data_array[i].data().data(), data_array[i].data().size());
-    CHECK_EQ(written_data_messages[i], data);
+           data_container->messageFormats().at(MyData::messageName())->name());
+  REQUIRE_EQ(data_container->subscriptionNames().size(), 1);
+
+  const auto subscription = data_container->subscription(MyData::messageName());
+  REQUIRE_EQ(subscription->size(), written_data_messages.size());
+  for (size_t i = 0; i < subscription->size(); ++i) {
+    const auto& sample = (*subscription)[i];
+    const auto& gt = written_data_messages[i];
+    MyData memcopied_sample{};
+    REQUIRE_GE(sizeof(MyData), sample.rawData().size());
+    // check raw byte equality
+    memcpy(&memcopied_sample, sample.rawData().data(), sample.rawData().size());
+    CHECK_EQ(gt, memcopied_sample);
+    // check API access field equality
+    CHECK_EQ(gt.timestamp, sample["timestamp"].as<uint64_t>());
+    CHECK_EQ(gt.cpuload, sample["cpuload"].as<float>());
+    CHECK_EQ(gt.counter, sample["counter"].as<int8_t>());
   }
 }
 
