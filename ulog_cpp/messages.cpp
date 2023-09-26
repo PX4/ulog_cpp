@@ -311,21 +311,19 @@ MessageInfo::MessageInfo(Field field, std::vector<uint8_t> value, bool is_multi,
     : _field(std::move(field)), _value(std::move(value)), _continued(continued), _is_multi(is_multi)
 {
 }
-MessageInfo::MessageInfo(const std::string& key, int32_t value)
+MessageInfo::MessageInfo(const std::string& key, int32_t value) : _field({"int32_t", key})
 {
-  _field = {"int32_t", key};
   _value.resize(sizeof(value));
   memcpy(_value.data(), &value, sizeof(value));
 }
-MessageInfo::MessageInfo(const std::string& key, float value)
+MessageInfo::MessageInfo(const std::string& key, float value) : _field({"float", key})
 {
-  _field = {"float", key};
   _value.resize(sizeof(value));
   memcpy(_value.data(), &value, sizeof(value));
 }
 MessageInfo::MessageInfo(const std::string& key, const std::string& value)
+    : _field({"char", key, static_cast<int>(value.length())})
 {
-  _field = {"char", key, static_cast<int>(value.length())};
   _value.resize(value.length());
   memcpy(_value.data(), value.data(), value.length());
 }

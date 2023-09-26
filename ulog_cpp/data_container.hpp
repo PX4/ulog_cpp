@@ -27,7 +27,7 @@ class DataContainer : public DataHandlerInterface {
 
     NameAndMultiIdKey() = default;
 
-    NameAndMultiIdKey(const std::string& name, int multi_id) : name(name), multi_id(multi_id) {}
+    NameAndMultiIdKey(std::string name, int multi_id) : name(std::move(name)), multi_id(multi_id) {}
 
     bool operator==(const NameAndMultiIdKey& other) const
     {

@@ -4,7 +4,6 @@
  ****************************************************************************/
 
 #include <chrono>
-#include <cstdint>
 #include <string>
 #include <thread>
 #include <ulog_cpp/simple_writer.hpp>

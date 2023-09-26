@@ -8,7 +8,6 @@
 #include <string>
 #include <ulog_cpp/data_container.hpp>
 #include <ulog_cpp/reader.hpp>
-#include <variant>
 
 int main(int argc, char** argv)
 {
@@ -47,7 +46,7 @@ int main(int argc, char** argv)
 
   // List all subscription names
   for (const auto& sub : data_container->subscriptionNames()) {
-    std::cout << sub << std::endl;
+    std::cout << sub << "\n";
   }
 
   // Get a particular subscription
@@ -55,11 +54,11 @@ int main(int argc, char** argv)
 
   // Get message format of subscription
   auto message_format = subscription->format();
-  std::cout << "Message format: " << message_format->name() << std::endl;
+  std::cout << "Message format: " << message_format->name() << "\n";
 
   // List all field names
   for (const std::string& field : subscription->fieldNames()) {
-    std::cout << field << std::endl;
+    std::cout << field << "\n";
   }
 
   // Get particular field
@@ -71,7 +70,7 @@ int main(int argc, char** argv)
     // gets cast to the value you put in int.
     // This also works for arrays and strings.
     auto nav_state = sample[nav_state_field].as<int>();
-    std::cout << nav_state << std::endl;
+    std::cout << nav_state << "\n";
   }
 
   // get a specific sample
@@ -80,18 +79,18 @@ int main(int argc, char** argv)
   // access values by name
   auto timestamp = sample_12["timestamp"].as<uint64_t>();
 
-  std::cout << timestamp << std::endl;
+  std::cout << timestamp << "\n";
 
   // get from nested data type
   auto esc_format =
       data_container->messageFormats().at("esc_status")->field("esc")->type().nested_message;
   for (const auto& field_name : esc_format->fieldNames()) {
-    std::cout << field_name << std::endl;
+    std::cout << field_name << "\n";
   }
 
   auto esc_status = data_container->subscription("esc_status");
   for (const auto& sample : *esc_status) {
-    std::cout << "timestamp: " << sample["esc"][7]["esc_power"].as<int>() << std::endl;
+    std::cout << "timestamp: " << sample["esc"][7]["esc_power"].as<int>() << "\n";
   }
   return 0;
 }

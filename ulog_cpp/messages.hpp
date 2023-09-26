@@ -16,13 +16,22 @@
 
 #include "exception.hpp"
 #include "raw_messages.hpp"
+#include "utils.hpp"
 
 namespace ulog_cpp {
 
 // ULog format: https://docs.px4.io/main/en/dev_log/ulog_file_format.html
 
+/**
+ * @brief Definition for a function that writes data to a file
+ * Each message has a serialize() method that takes a DataWriteCB as argument.
+ * The serialize() method calls the DataWriteCB with the data to be written.
+ */
 using DataWriteCB = std::function<void(const uint8_t* data, int length)>;
 
+/**
+ * @brief ULog file header "message". The file header is always the first element in a ULG file.
+ */
 class FileHeader {
  public:
   FileHeader(const ulog_file_header_s& header, const ulog_message_flag_bits_s& flag_bits);
@@ -49,8 +58,33 @@ class FileHeader {
 
 class MessageFormat;  // forward declaration
 
+/**
+ * @brief Type definition for a Field. A field is a named data element in a message.
+ * Fields occur in
+ * - Message Formats
+ * - Parameter message types (they have exactly one field)
+ * - Info Messages (MessageInfo) (they have exactly one field)
+ *
+ * A field can be of a basic type (int, float, char, ...), an array of a basic type,
+ * or reference a MessageFormat (nested message).
+ *
+ * In case a field is of nested type, the nested Message Format has to be resolved during parsing.
+ * Since all Message Formats are in the header, at the end of the header, all nested fields should
+ * be resolved.
+ *
+ * A field can be in "resolved" and "unresolved" state. In resolved state, the following things
+ * are defined:
+ * - Offset of the field in the Message Format
+ * - Size of the field
+ *
+ * In a correct file, all fields can be resolved after the header is parsed.
+ */
 class Field {
  public:
+  /**
+   * Enum for the basic types of a field. Note that they can also appear as arrays, NESTED
+   * references a child MessageFormat.
+   */
   enum class BasicType {
     INT8,
     UINT8,
@@ -67,26 +101,47 @@ class Field {
     NESTED,
   };
 
+  /**
+   * TypeAttribute type stores basic information about a type. In case of basic types,
+   * the attribute field is just copied from the kBaiscTypes map. In case of nested types,
+   * the attributes are dynamically computed in nested type resolution.
+   */
   struct TypeAttributes {
-    std::string name;
-    BasicType type;
-    int size;
-    std::shared_ptr<MessageFormat> nested_message{nullptr};
+    std::string name;  ///< name of the type
+    BasicType type;    ///< type as an enum
+    int size;          ///< size in bytes. Recursively computed for nested types
+    std::shared_ptr<MessageFormat> nested_message{nullptr};  /// < nested message format
 
     TypeAttributes() = default;
 
-    TypeAttributes(std::string name, BasicType type_, int size_)
-        : name(std::move(name)), type(type_), size(size_), nested_message(nullptr)
+    TypeAttributes(std::string name, BasicType type, int size)
+        : name(std::move(name)), type(type), size(size), nested_message(nullptr)
     {
     }
   };
 
+  /**
+   * @brief Map of all basic types. Used to resolve basic types from strings.
+   */
   static const std::map<std::string, TypeAttributes> kBasicTypes;
 
   Field() = default;
 
+  /**
+   * @brief Construct a field from input bytes. The string is expected to be in the format
+   * '<type>[len] <name>' or '<type> <name>'.
+   * This function is used when parsing data.
+   * @param str The input string pointer
+   * @param len The length of the input string
+   */
   Field(const char* str, int len);
 
+  /**
+   * @brief Construct a field from a string. The string is expected to be in the format
+   * @param type_str The type string
+   * @param name_str The name string
+   * @param array_length_int The array length. -1 if not an array
+   */
   Field(const std::string& type_str, std::string name_str, int array_length_int = -1)
       : _array_length(array_length_int), _name(std::move(name_str))
   {
@@ -101,43 +156,108 @@ class Field {
 
   std::string encode() const;
 
+  /**
+   * @brief Equality operator for fields. Two fields are equal if their type, array length and name
+   * are equal.
+   * @param field The field to compare to
+   * @return True if the fields are equal
+   */
   bool operator==(const Field& field) const
   {
     return _type.name == field._type.name && _array_length == field._array_length &&
            _name == field._name;
   }
 
+  /**
+   * @brief Get the type attributes of the field
+   * @return The type attributes
+   */
   inline const TypeAttributes& type() const { return _type; }
 
+  /**
+   * @brief Get the array length of the field
+   * @return The array length, -1 if not an array
+   */
   inline int arrayLength() const { return _array_length; }
 
+  /**
+   * @brief Get the offset of the field in the message. This is only valid if the field is resolved.
+   * @return The offset in bytes, -1 if not resolved
+   */
   inline int offsetInMessage() const { return _offset_in_message_bytes; }
 
+  /**
+   * @brief Get the name of the field
+   * @return The name
+   */
   inline const std::string& name() const { return _name; }
 
+  /**
+   * @brief Get the size of the field in bytes. This is only valid if the field is resolved.
+   * @return The size in bytes, 0 if nested type is not resolved
+   */
   inline int sizeBytes() const;
 
+  /**
+   * @brief Returns true if the field is resolved. A field is resolved if the offset in message
+   * is defined and the type is not nested or the nested message is resolved.
+   * @return True if the field is resolved
+   */
   inline bool definitionResolved() const
   {
     return _offset_in_message_bytes >= 0 &&
            (_type.type != BasicType::NESTED || _type.nested_message != nullptr);
   };
 
+  /**
+   * @brief Attempt to resolve the definition of the field.
+   * This would be called to resolve the definition of a field in a message format.
+   * Fields would have to be resolved in-order, after each field being resolved, the offset
+   * of the next field can be computed by reading the size of the last field.
+   * @param existing_formats The map of existing message formats. Used to resolve nested types.
+   * @param offset The offset of the field in the message
+   */
   void resolveDefinition(
       const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats, int offset);
 
+  /**
+   * Resolve this field's definition, knowing that it will for sure not be of nested type.
+   * Resolution will fail if the type is nested.
+   * @param offset the offset of the field in the message
+   */
   void resolveDefinition(int offset);
 
  private:
-  TypeAttributes _type;
+  TypeAttributes _type;   ///< type attributes
   int _array_length{-1};  ///< -1 means not-an-array
   int _offset_in_message_bytes{
-      -1};  ///< default to begin of message. Gets filled on MessageFormat resolution
-  std::string _name;
+      -1};            ///< default to begin of message. Gets filled on MessageFormat resolution
+  std::string _name;  /// < name of the field
 };
 
+/**
+ * @brief A value is a wrapper around a variant of all possible value types.
+ * This class can extract values from the underlying data representation and cast the values
+ * to the user defined types, or return them as a variant.
+ *
+ * The basic concept of this class is to always(!) extract the value in the format that it is
+ * defined in the MessageFormat. For example, if the value is defined as a float, in the
+ * MessageFormat, it will be interpreted as float.
+ *
+ * Since these types are only available at runtime, one can get the value as an std::variant,
+ * and then do appropriate handling for each type. In case the user knows what type to expect,
+ * it can also be explicitly casted to the desired type. In this case, any type conversion that is
+ * allowed by `static_cast will` be performed.
+ *
+ * Array types can be directly extracted as std::vector<T>, string types as std::string.
+ */
 class Value {
  public:
+  /**
+   * NativeTypeVariant is a variant of all possible types that a value can be.
+   * Note that it includes all array types as std::vectors, but not nested type.
+   * Nested is handled differently.
+   */
   using NativeTypeVariant =
       std::variant<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float,
                    double, bool, char, std::vector<int8_t>, std::vector<uint8_t>,
@@ -145,14 +265,13 @@ class Value {
                    std::vector<uint32_t>, std::vector<int64_t>, std::vector<uint64_t>,
                    std::vector<float>, std::vector<double>, std::vector<bool>, std::string>;
 
-  template <typename T>
-  struct is_vector : std::false_type {};
-  template <typename T>
-  struct is_vector<std::vector<T>> : std::true_type {};
-
-  template <typename T>
-  struct is_string : std::is_same<std::decay_t<T>, std::string> {};
-
+  /**
+   * Construct a "Value" representation from underlying memory and Field reference
+   * @param field_ref The field reference to use
+   * @param backing_ref_begin Begin iterator of underlying memory
+   * @param backing_ref_end End iterator of underlying memory
+   * @param array_index Array within an array field to access directly
+   */
   Value(const Field& field_ref, const std::vector<uint8_t>::const_iterator& backing_ref_begin,
         const std::vector<uint8_t>::const_iterator& backing_ref_end, int array_index = -1)
       : _field_ref(field_ref),
@@ -167,8 +286,37 @@ class Value {
   {
   }
 
+  /**
+   * @brief Get the value as a variant of all possible types.
+   * In case the underlying type is an array, it will be extracted as a std::vector<T>.
+   * In case the underlying type is a char array, it will be extracted as a std::string.
+   * In case the underlying type is an array, but we access a specific element, it will be
+   * extracted as the basic type T.
+   * @return std::variant of the value, in type defined in the Message Format
+   */
   NativeTypeVariant asNativeTypeVariant() const;
 
+  /**
+   * @brief Cast the value to a desired, compile time known type. This will perform a static_cast
+   * to the desired type, if the type conversion is allowed by static_cast.
+   * For example one can extract a value defined as a uint8_t as an int.
+   *
+   * There are the following rules:
+   * - If requested type is vector<T> and native type is also vector<T>, vector<T> is returned
+   * - If requested type is vector<T>, but native type is vector<K>, each element gets casted from K
+   * to T
+   * - If requested type is not a vector, but native type is a vector, the first element is returned
+   * - If requested type is a vector, but native type is not a vector, a vector with 1 element is
+   * returned
+   * - If requested type is T and native type is K, a static_cast is performed on the element
+   * - If requested type is T and native type is T as well, the element is returned
+   *
+   * Specifically, when casting (signed) char, char is first casted to unsigned char, as this
+   * is generally the more expected behaviour (e.g. when casting a char to an int, one would
+   * expect the ASCII value of the char, not the signed value).
+   * @tparam T
+   * @return
+   */
   template <typename T>
   T as() const
   {
@@ -204,7 +352,7 @@ class Value {
             } else {
               // return type is not a vector, just return first element
               if (arg.size() > 0) {
-                res = static_cast<ReturnType>(arg[0]);
+                res = staticCastEnsureUnsignedChar<ReturnType>(arg[0]);
               } else {
                 throw ParsingException("Cannot convert empty vector to non-vector type");
               }
@@ -217,7 +365,7 @@ class Value {
               res[0] = static_cast<typename ReturnType::value_type>(arg);
             } else {
               // return type is not a vector
-              res = static_cast<ReturnType>(arg);
+              res = staticCastEnsureUnsignedChar<ReturnType>(arg);
             }
           }
         },
@@ -225,11 +373,29 @@ class Value {
     return res;
   }
 
-  // For nested type access
+  /**
+   * Access a field in a nested message. This creates a new Value class,
+   * with the field definition from the nested Message Format.
+   * @param field The field in the nested format to access
+   * @return The value of the field in the nested format
+   */
   Value operator[](const Field& field) const;
 
+  /**
+   * Access a field in a nested message. This creates a new Value class,
+   * with the field definition from the nested Message Format.
+   * @param field_name the name of the field in the nested format to access
+   * @return the value of the field in the nested format
+   */
   Value operator[](const std::string& field_name) const;
 
+  /**
+   * Access a certain position in the array of this field. This creates a new Value class,
+   * with the array index property set. This allows access of individual message elements
+   * without converting the entire field into a vector first.
+   * @param index the index of the element to access
+   * @return a new Value object with the array index property set
+   */
   Value operator[](size_t index) const;
 
  private:
@@ -244,7 +410,8 @@ class Value {
         backing_end - backing_start - total_offset < static_cast<int64_t>(sizeof(v))) {
       throw ParsingException("Unexpected data type size");
     }
-    std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v), (uint8_t*)&v);
+    std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v),
+              reinterpret_cast<uint8_t*>(&v));
     return v;
   }
 
@@ -261,12 +428,20 @@ class Value {
     return res;
   }
 
-  const Field& _field_ref;
-  const int _array_index = -1;
-  const std::vector<uint8_t>::const_iterator _backing_ref_begin;
-  const std::vector<uint8_t>::const_iterator _backing_ref_end;
+  const Field& _field_ref;      /// < reference to the field definition
+  const int _array_index = -1;  /// < index in the array, -1 if accessing head, or not an array
+  const std::vector<uint8_t>::const_iterator
+      _backing_ref_begin;  /// < begin iterator of the backing vector
+  const std::vector<uint8_t>::const_iterator
+      _backing_ref_end;  /// < end iterator of the backing vector
 };
 
+/**
+ * Class that contains an Info Message. An info message can either be standalone, or be comprised
+ * of multiple subsequent info messages.
+ * An info message has a single field, which can theoretically be of any type. However, in practice
+ * it is mostly a basic type.
+ */
 class MessageInfo {
  public:
   explicit MessageInfo(const uint8_t* msg, bool is_multi = false);
@@ -302,16 +477,57 @@ class MessageInfo {
   bool _is_multi{false};
 };
 
+/**
+ * Class that contains a Message Format. A message format contains all the fields contained in
+ * Message Formats have to appear in the header of the log file, and are also parsed there.
+ * a message. Message formats are referenced in
+ * - Subscriptions: Each subscription is of a specific message format.
+ * - Fields: Each field can be of type nested, and have a reference to a message format then.
+ *
+ * Message Formats can be recursive. A MessageFormat can contain a Field that is of nested type,
+ * which refers to another MessgeFormat and so on. Therefore, when MessageFormats are parsed,
+ * they are generally not "resolved" as for then nested Fields, MessageDefinitions may not be
+ * available yet.
+ * MessageFormats are resolved once the header is parsed.
+ */
 class MessageFormat {
  public:
+  /**
+   * Construct a messsage format from a raw message. This is used when parsing the header.
+   * @param msg the raw message
+   */
   explicit MessageFormat(const uint8_t* msg);
 
+  /**
+   * Manually construct a message format.
+   * @param name name of the message format
+   * @param fields list of fields, in-order.
+   */
   explicit MessageFormat(std::string name, const std::vector<Field>& fields);
 
+  /**
+   * @return the name of the message format
+   */
   const std::string& name() const { return _name; }
+
+  /**
+   * @return the map of fields, keyed by name
+   */
   const std::map<std::string, std::shared_ptr<Field>>& fieldMap() const { return _fields; }
 
+  /**
+   * Serialize the message format into a raw message.
+   * @param writer
+   */
   void serialize(const DataWriteCB& writer) const;
+
+  /**
+   * Compare two message formats for equality.
+   * Two message formats are equal if they have the same name, and the same fields in the same
+   * order.
+   * @param format the message format to compare to
+   * @return true if the message formats are equal, false otherwise
+   */
   bool operator==(const MessageFormat& format) const
   {
     if (_name != format._name) {
@@ -328,28 +544,52 @@ class MessageFormat {
     return true;
   }
 
+  /**
+   * Recursively tries to resolve the MessageFormat with the help of a map of all known, existing
+   * message formats. This is used to resolve nested fields, at the end of parsing the header.
+   * @param existing_formats
+   */
   void resolveDefinition(
       const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats) const;
 
+  /**
+   * Returns the total size of this MessageFormat in bytes. This is only valid once the
+   * MessageFormat has been resolved. All fields have to be resolved, and the size of the
+   * MessageFormat is the sum of the sizes of all fields.
+   * @return the size of the MessageFormat in bytes
+   */
   int sizeBytes() const;
 
+  /**
+   * @return the list of fields, in-order
+   */
   std::vector<std::shared_ptr<Field>> fields() const { return _fields_ordered; }
 
+  /**
+   * @return the list of field names, in-order
+   */
   std::vector<std::string> fieldNames() const
   {
     std::vector<std::string> names;
-    for (auto& field : _fields_ordered) {
-      names.push_back(field->name());
+    for (const auto& field_it : _fields_ordered) {
+      names.push_back(field_it->name());
     }
     return names;
   }
 
+  /**
+   * Get a field by name.
+   * @param name the name of the field
+   * @return the requested field
+   */
   std::shared_ptr<Field> field(const std::string& name) const { return _fields.at(name); }
 
  private:
   std::string _name;
-  std::map<std::string, std::shared_ptr<Field>> _fields;
-  std::vector<std::shared_ptr<Field>> _fields_ordered;
+  std::map<std::string, std::shared_ptr<Field>>
+      _fields;  /// < map of fields, keyed by name, same fields as in the list
+  std::vector<std::shared_ptr<Field>>
+      _fields_ordered;  /// < list of fields, in-order, same fields as in the map
 };
 
 using Parameter = MessageInfo;
@@ -435,6 +675,11 @@ class Logging {
   std::string _message;
 };
 
+/**
+ * Data is an element that contains a single element from a subscription. In order
+ * to decode it, it will need to get referenced to a MessageFormat. This is done using
+ * the TypedDataView class in Subscription.
+ */
 class Data {
  public:
   explicit Data(const uint8_t* msg);
