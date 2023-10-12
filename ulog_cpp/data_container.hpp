@@ -115,6 +115,18 @@ class DataContainer : public DataHandlerInterface {
     return _subscriptions_by_name_and_multi_id.at({name, 0});
   }
 
+ protected:
+  std::map<std::string, MessageInfo>& messageInfoRef() { return _message_info; }
+  std::map<std::string, std::vector<std::vector<MessageInfo>>>& messageInfoMultiRef()
+  {
+    return _message_info_multi;
+  }
+  std::map<std::string, Parameter>& initialParametersRef() { return _initial_parameters; }
+  std::map<std::string, ParameterDefault>& defaultParametersRef() { return _default_parameters; }
+  std::vector<Parameter>& changedParametersRef() { return _changed_parameters; }
+  std::vector<Logging>& loggingRef() { return _logging; }
+  std::vector<Dropout>& dropoutsRef() { return _dropouts; }
+
  private:
   const StorageConfig _storage_config;
 
