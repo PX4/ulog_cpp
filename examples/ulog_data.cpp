@@ -45,52 +45,69 @@ int main(int argc, char** argv)
   // Read out some data
 
   // List all subscription names
-  for (const auto& sub : data_container->subscriptionNames()) {
+  auto subscription_names = data_container->subscriptionNames();
+  for (const auto& sub : subscription_names) {
     std::cout << sub << "\n";
   }
 
   // Get a particular subscription
-  const auto& subscription = data_container->subscription("vehicle_status");
+  if (subscription_names.find("vehicle_status") != subscription_names.end()) {
+    const auto& subscription = data_container->subscription("vehicle_status");
 
-  // Get message format of subscription
-  auto message_format = subscription->format();
-  std::cout << "Message format: " << message_format->name() << "\n";
+    // Get message format of subscription
+    auto message_format = subscription->format();
+    std::cout << "Message format: " << message_format->name() << "\n";
 
-  // List all field names
-  for (const std::string& field : subscription->fieldNames()) {
-    std::cout << field << "\n";
+    // List all field names
+    std::cout << "Field names: "
+              << "\n";
+    for (const std::string& field : subscription->fieldNames()) {
+      std::cout << field << "\n";
+    }
+
+    // Get particular field
+    auto nav_state_field = subscription->field("nav_state");
+
+    // Iterate over all samples
+    std::cout << "nav_state values: \n";
+    for (const auto& sample : *subscription) {
+      // always correctly extracts the type as defined in the message definition,
+      // gets cast to the value you put in int.
+      // This also works for arrays and strings.
+      auto nav_state = sample[nav_state_field].as<int>();
+      std::cout << nav_state << ", ";
+    }
+    std::cout << "\n";
+
+    // get a specific sample
+    auto sample_12 = subscription->at(12);
+
+    // access values by name
+    auto timestamp = sample_12["timestamp"].as<uint64_t>();
+
+    std::cout << timestamp << "\n";
+  } else {
+    std::cout << "No vehicle_status subscription found\n";
   }
 
-  // Get particular field
-  auto nav_state_field = subscription->field("nav_state");
-
-  // Iterate over all samples
-  for (const auto& sample : *subscription) {
-    // always correctly extracts the type as defined in the message definition,
-    // gets cast to the value you put in int.
-    // This also works for arrays and strings.
-    auto nav_state = sample[nav_state_field].as<int>();
-    std::cout << nav_state << "\n";
+  if (data_container->messageFormats().find("esc_status") !=
+      data_container->messageFormats().end()) {
+    const auto& message_format = data_container->messageFormats().at("esc_status");
+    std::cout << "Message format: " << message_format->name() << "\n";
+    for (const auto& field_name : message_format->fieldNames()) {
+      std::cout << field_name << "\n";
+    }
+  } else {
+    std::cout << "No esc_status message format found\n";
   }
 
-  // get a specific sample
-  auto sample_12 = subscription->at(12);
-
-  // access values by name
-  auto timestamp = sample_12["timestamp"].as<uint64_t>();
-
-  std::cout << timestamp << "\n";
-
-  // get from nested data type
-  auto esc_format =
-      data_container->messageFormats().at("esc_status")->field("esc")->type().nested_message;
-  for (const auto& field_name : esc_format->fieldNames()) {
-    std::cout << field_name << "\n";
-  }
-
-  auto esc_status = data_container->subscription("esc_status");
-  for (const auto& sample : *esc_status) {
-    std::cout << "timestamp: " << sample["esc"][7]["esc_power"].as<int>() << "\n";
+  if (subscription_names.find("esc_status") != subscription_names.end()) {
+    auto esc_status = data_container->subscription("esc_status");
+    for (const auto& sample : *esc_status) {
+      std::cout << "esc_power: " << sample["esc"][7]["esc_power"].as<int>() << "\n";
+    }
+  } else {
+    std::cout << "No esc_status subscription found\n";
   }
   return 0;
 }

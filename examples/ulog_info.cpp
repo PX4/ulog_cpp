@@ -94,13 +94,6 @@ int main(int argc, char** argv)
       subscriptions.size());
   std::transform(subscriptions.begin(), subscriptions.end(), sorted_subscription_keys.begin(),
                  [](const auto& pair) { return pair.first; });
-  std::sort(sorted_subscription_keys.begin(), sorted_subscription_keys.end(),
-            [](const auto& a, const auto& b) {
-              if (a.name == b.name) {
-                return a.multi_id < b.multi_id;
-              }
-              return a.name < b.name;
-            });
   for (const auto& key : sorted_subscription_keys) {
     const auto& subscription = subscriptions.at(key);
     printf(" %s (%i)   -  %zu\n", key.name.c_str(), key.multi_id, subscription->size());

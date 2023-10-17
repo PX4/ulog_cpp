@@ -2,22 +2,17 @@
 
 include(FetchContent)
 
+set(SYSTEM_ARG SYSTEM)
 # cmake < 3.25 fails with system attribute
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.25")
-	FetchContent_Declare(
-			DocTest
-			GIT_REPOSITORY "https://github.com/doctest/doctest.git"
-			GIT_TAG "v2.4.11"
-			SYSTEM
-	)
-
-else()
-	FetchContent_Declare(
-			DocTest
-			GIT_REPOSITORY "https://github.com/doctest/doctest.git"
-			GIT_TAG "v2.4.11"
-	)
+if (CMAKE_VERSION VERSION_LESS "3.25")
+	set(SYSTEM_ARG "")
 endif ()
+FetchContent_Declare(
+		DocTest
+		GIT_REPOSITORY "https://github.com/doctest/doctest.git"
+		GIT_TAG "v2.4.11"
+		${SYSTEM_ARG}
+)
 
 
 FetchContent_MakeAvailable(DocTest)

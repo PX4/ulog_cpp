@@ -247,7 +247,7 @@ class Field {
  * Since these types are only available at runtime, one can get the value as an std::variant,
  * and then do appropriate handling for each type. In case the user knows what type to expect,
  * it can also be explicitly casted to the desired type. In this case, any type conversion that is
- * allowed by `static_cast will` be performed.
+ * allowed by `static_cast` will be performed.
  *
  * Array types can be directly extracted as std::vector<T>, string types as std::string.
  */
@@ -346,7 +346,7 @@ class Value {
                 // return type is different from native type, but a vector
                 res.resize(arg.size());
                 for (std::size_t i = 0; i < arg.size(); i++) {
-                  res[i] = static_cast<typename ReturnType::value_type>(arg[i]);
+                  res[i] = staticCastEnsureUnsignedChar<typename ReturnType::value_type>(arg[i]);
                 }
               }
             } else {
@@ -362,7 +362,7 @@ class Value {
             if constexpr (is_vector<ReturnType>::value) {
               // return type is a vector
               res.resize(1);
-              res[0] = static_cast<typename ReturnType::value_type>(arg);
+              res[0] = staticCastEnsureUnsignedChar<typename ReturnType::value_type>(arg);
             } else {
               // return type is not a vector
               res = staticCastEnsureUnsignedChar<ReturnType>(arg);

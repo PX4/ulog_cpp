@@ -13,7 +13,7 @@ namespace ulog_cpp {
 /**
  * TypedDataView is a view on a Data object, which allows to access the data using the
  * MessageFormat meta definition. The subscription object only contains the Data object,
- * without repeated reference to the underlying MessageFormat, for storage efficiency reason.s
+ * without repeated reference to the underlying MessageFormat, for storage efficiency reasons.
  *
  * Note that TypedDataView should be a short-lived object solely to access data. As
  * it stores references to the underlying Data and MessageFormat objects, it is only valid

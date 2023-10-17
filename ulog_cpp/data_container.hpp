@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,7 +24,7 @@ class DataContainer : public DataHandlerInterface {
 
   struct NameAndMultiIdKey {
     std::string name;
-    int multi_id;
+    int multi_id{0};
 
     NameAndMultiIdKey() = default;
 
@@ -95,13 +96,13 @@ class DataContainer : public DataHandlerInterface {
     return _subscriptions_by_message_id;
   }
 
-  std::vector<std::string> subscriptionNames() const
+  std::set<std::string> subscriptionNames() const
   {
-    std::unordered_set<std::string> names;
+    std::set<std::string> names;
     for (const auto& kv : _subscriptions_by_name_and_multi_id) {
       names.insert(kv.first.name);
     }
-    return std::vector<std::string>(names.begin(), names.end());
+    return names;
   }
 
   std::shared_ptr<Subscription> subscription(const std::string& name, int multi_id) const

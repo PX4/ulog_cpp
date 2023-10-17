@@ -32,6 +32,15 @@ void DataContainer::headerComplete()
     message_info.field().resolveDefinition(_message_formats, 0);
   }
 
+  // try to resolve all fields for all multi message infos
+  for (auto& it : _message_info_multi) {
+    for (auto& message_infos_for_field : it.second) {
+      for (auto& message_info : message_infos_for_field) {
+        message_info.field().resolveDefinition(_message_formats, 0);
+      }
+    }
+  }
+
   // try to resolve all fields for params
   for (auto& it : _default_parameters) {
     auto& parameter = it.second;
