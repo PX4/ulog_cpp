@@ -21,6 +21,7 @@ FetchContent_MakeAvailable(DocTest)
 add_executable(tests
     main.cpp
     ulog_parsing_test.cpp
+		read_api_test.cpp
 )
 
 target_link_libraries(tests PUBLIC
