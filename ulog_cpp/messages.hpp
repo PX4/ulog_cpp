@@ -399,6 +399,14 @@ class Value {
   /**
    * Access a field in a nested message. This creates a new Value class,
    * with the field definition from the nested Message Format.
+   * @param field The field in the nested format to access
+   * @return The value of the field in the nested format
+   */
+  Value operator[](const std::shared_ptr<Field>& field) const;
+
+  /**
+   * Access a field in a nested message. This creates a new Value class,
+   * with the field definition from the nested Message Format.
    * @param field_name the name of the field in the nested format to access
    * @return the value of the field in the nested format
    */

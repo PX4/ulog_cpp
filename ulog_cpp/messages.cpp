@@ -304,6 +304,11 @@ Value Value::operator[](const Field& field) const
   return Value(field, _backing_ref_begin + submessage_offset, _backing_ref_end);
 }
 
+Value Value::operator[](const std::shared_ptr<Field>& field) const
+{
+  return operator[](*field);
+}
+
 Value Value::operator[](const std::string& field_name) const
 {
   if (_field_ref.type().type != Field::BasicType::NESTED) {
