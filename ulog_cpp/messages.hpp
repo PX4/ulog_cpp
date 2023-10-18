@@ -227,6 +227,21 @@ class Field {
    */
   void resolveDefinition(int offset);
 
+  /**
+   * For nested fields, this returns the format of the nested field.
+   * For not nested fields, this throws.
+   * @return The format of the nested field
+   */
+  std::shared_ptr<MessageFormat> nestedFormat() const;
+
+  /**
+   * For nested fields, this will return a field from the nested message format.
+   * For not nested fields, this throws
+   * @param name The name of the field of the nested message format
+   * @return The field from the nested message format
+   */
+  std::shared_ptr<Field> nestedField(const std::string& name) const;
+
  private:
   TypeAttributes _type;   ///< type attributes
   int _array_length{-1};  ///< -1 means not-an-array

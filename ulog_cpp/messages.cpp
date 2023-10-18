@@ -142,6 +142,22 @@ void Field::resolveDefinition(int offset)
   _offset_in_message_bytes = offset;
 }
 
+std::shared_ptr<MessageFormat> Field::nestedFormat() const
+{
+  if (_type.type != Field::BasicType::NESTED) {
+    throw ParsingException("Not a nested type");
+  }
+  return _type.nested_message;
+}
+
+std::shared_ptr<Field> Field::nestedField(const std::string& name) const
+{
+  if (_type.type != Field::BasicType::NESTED) {
+    throw ParsingException("Not a nested type");
+  }
+  return _type.nested_message->field(name);
+}
+
 const std::map<std::string, Field::TypeAttributes> Field::kBasicTypes{
     {"int8_t", {"int8_t", Field::BasicType::INT8, 1}},
     {"uint8_t", {"uint8_t", Field::BasicType::UINT8, 1}},
