@@ -22,6 +22,25 @@ static inline ReturnType staticCastEnsureUnsignedChar(const OriginType& v)
 }
 
 /**
+ * Manual implementation of strnlen, since it does not exist in std.
+ * Counts the number of characters in the string, excluding the terminal zero.
+ * Returns at most `max_len`
+ * @param ptr The pointer to the string in memory
+ * @param max_len The maximum number of characters to report
+ * @return The number of characters in the string until terminating zero, not including the zero
+ * or max_len if no terminating zero found until max_len reached
+ */
+inline int strnlen(const uint8_t* ptr, int max_len)
+{
+  int len = 0;
+  while ((*ptr != 0) && (len < max_len)) {
+    ptr++;
+    len++;
+  }
+  return len;
+}
+
+/**
  * SFINAE helper to check if a type is a vector
  * @tparam T The type to check
  */

@@ -257,11 +257,15 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
       case Field::BasicType::BOOL:
         return deserializeVector<bool>(_backing_ref_begin, _backing_ref_end,
                                        _field_ref.offsetInMessage(), _field_ref.arrayLength());
-      case Field::BasicType::CHAR:
-        if (_backing_ref_end - _backing_ref_begin < _field_ref.arrayLength()) {
+      case Field::BasicType::CHAR: {
+        auto string_start_iterator = _backing_ref_begin + _field_ref.offsetInMessage();
+        if (_backing_ref_end - string_start_iterator < _field_ref.arrayLength()) {
           throw ParsingException("Decoding fault, memory too short");
         }
-        return std::string(_backing_ref_begin, _backing_ref_begin + _field_ref.arrayLength());
+        int string_length = strnlen(string_start_iterator.base(), _field_ref.arrayLength());
+        return std::string(string_start_iterator, string_start_iterator + string_length);
+      }
+
       case Field::BasicType::NESTED:
         throw ParsingException("Can't get nested field as basic type. Field " + _field_ref.name());
     }
