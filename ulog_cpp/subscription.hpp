@@ -121,7 +121,7 @@ class SubscriptionIterator {
   using iterator_category = std::random_access_iterator_tag;  // NOLINT(*-identifier-naming)
   using value_type = TypedDataView;                           // NOLINT(*-identifier-naming)
   using difference_type = std::ptrdiff_t;                     // NOLINT(*-identifier-naming)
-  using Pointer = TypedDataView*;                             // NOLINT(*-identifier-naming)
+  using pointer = TypedDataView*;                             // NOLINT(*-identifier-naming)
   using reference = TypedDataView&;                           // NOLINT(*-identifier-naming)
 
   TypedDataView operator*() { return TypedDataView(*_it, *_message_format); }
