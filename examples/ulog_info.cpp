@@ -87,16 +87,9 @@ int main(int argc, char** argv)
   // Messages
   printf("\n");
   printf("Name (multi id)  - number of data points\n");
-
-  // Sort by name & multi id
-  const auto& subscriptions = data_container->subscriptionsByNameAndMultiId();
-  std::vector<ulog_cpp::DataContainer::NameAndMultiIdKey> sorted_subscription_keys(
-      subscriptions.size());
-  std::transform(subscriptions.begin(), subscriptions.end(), sorted_subscription_keys.begin(),
-                 [](const auto& pair) { return pair.first; });
-  for (const auto& key : sorted_subscription_keys) {
-    const auto& subscription = subscriptions.at(key);
-    printf(" %s (%i)   -  %zu\n", key.name.c_str(), key.multi_id, subscription->size());
+  for (const auto& item : data_container->subscriptionsByNameAndMultiId()) {
+    printf(" %s (%i)   -  %zu\n", item.first.name.c_str(), item.first.multi_id,
+           item.second->size());
   }
 
   printf("Formats:\n");
