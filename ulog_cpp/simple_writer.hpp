@@ -36,7 +36,7 @@ class SimpleWriter {
   ~SimpleWriter();
 
   /**
-   * Write a key-value info to the header. Typically used for versioning information.
+   * Write a key-value info. Typically used for versioning information and written to the header.
    * @tparam T one of std::string, int32_t, float
    * @param key (unique) name, e.g. sys_name
    * @param value
@@ -44,9 +44,6 @@ class SimpleWriter {
   template <typename T>
   void writeInfo(const std::string& key, const T& value)
   {
-    if (_header_complete) {
-      throw UsageException("Header already complete");
-    }
     _writer->messageInfo(ulog_cpp::MessageInfo(key, value));
   }
 
