@@ -19,9 +19,6 @@ add_subdirectory(ulog_cpp)
 
 if(MAIN_PROJECT)
 	add_compile_options(
-		# always enable debug symbols (for stack trace)
-		-g
-
 		# Warnings
 		-Wall
 		-Wextra
@@ -30,7 +27,6 @@ if(MAIN_PROJECT)
 		# disabled warnings
 		-Wno-missing-field-initializers
 		-Wno-unused-parameter
-		-Wno-float-equal # TODO: this is required for cli11 2.3.2
 	)
 
 	# compiler specific flags
