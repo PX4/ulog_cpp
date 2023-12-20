@@ -107,9 +107,9 @@ class Field {
    * the attributes are dynamically computed in nested type resolution.
    */
   struct TypeAttributes {
-    std::string name;  ///< name of the type
-    BasicType type;    ///< type as an enum
-    int size;          ///< size in bytes. Recursively computed for nested types
+    std::string name;                   ///< name of the type
+    BasicType type{BasicType::NESTED};  ///< type as an enum
+    int size{0};                        ///< size in bytes. Recursively computed for nested types
     std::shared_ptr<MessageFormat> nested_message{nullptr};  /// < nested message format
 
     TypeAttributes() = default;
