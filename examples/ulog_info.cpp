@@ -4,6 +4,7 @@
  ****************************************************************************/
 
 #include <algorithm>
+#include <cinttypes>
 #include <fstream>
 #include <iostream>
 #include <numeric>
@@ -108,8 +109,8 @@ int main(int argc, char** argv)
     if (logging.hasTag()) {
       tag_str = std::to_string(logging.tag()) + " ";
     }
-    printf(" %s<%s> %lu %s\n", tag_str.c_str(), logging.logLevelStr().c_str(), logging.timestamp(),
-           logging.message().c_str());
+    printf(" %s<%s> %" PRIu64 " %s\n", tag_str.c_str(), logging.logLevelStr().c_str(),
+           logging.timestamp(), logging.message().c_str());
   }
 
   // Params (init, after, defaults)
