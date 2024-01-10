@@ -94,6 +94,15 @@ class TypedDataView {
   const MessageFormat& format() const { return _message_format_ref; }
 
   /**
+   * Checks if a field is present in the underlying MessageFormat
+   */
+  bool hasField(const std::string& field_name) const
+  {
+    const auto iter = _message_format_ref.fieldMap().find(field_name);
+    return iter != _message_format_ref.fieldMap().end() && iter->second->definitionResolved();
+  }
+
+  /**
    * @return The underlying raw data vector
    */
   const std::vector<uint8_t>& rawData() const { return _data_ref.data(); }
