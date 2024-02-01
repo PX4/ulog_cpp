@@ -605,7 +605,14 @@ class MessageFormat {
    * @param name the name of the field
    * @return the requested field
    */
-  std::shared_ptr<Field> field(const std::string& name) const { return _fields.at(name); }
+  std::shared_ptr<Field> field(const std::string& name) const
+  {
+    const auto it = _fields.find(name);
+    if (it == _fields.end()) {
+      throw AccessException("Field not found: " + name);
+    }
+    return it->second;
+  }
 
  private:
   std::string _name;

@@ -260,7 +260,13 @@ class Subscription {
                                                                    _message_format);
   }
 
-  TypedDataView at(std::size_t n) const { return begin()[n]; }
+  TypedDataView at(std::size_t n) const
+  {
+    if (n >= size()) {
+      throw AccessException("Index out of range: " + std::to_string(n));
+    }
+    return begin()[n];
+  }
 
   TypedDataView operator[](std::size_t n) { return at(n); }
 
