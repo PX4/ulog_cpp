@@ -84,11 +84,11 @@ TEST_CASE("Write complicated, nested data format, then read it")
 
   const uint64_t t00 = 0xdeadbeefdeadbeef;
   const int32_t t01 = -123456;
-  const char t02[] = "Hello World!";
+  const char t02[] = "Hello World!----";
   const double t03 = 3.14159265358979323846;
   const uint32_t t04 = 0xdeadbeef;
   const char t05 = 'a';
-  const char t06[] = "Hello World! 2";
+  const char t06[] = "Hello World! 2----";
   const int32_t t07 = 123456;
   const uint8_t t08 = 0x12;
   const uint8_t t09 = 0x34;
