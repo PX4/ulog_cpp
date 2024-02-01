@@ -145,7 +145,7 @@ void Field::resolveDefinition(int offset)
 std::shared_ptr<MessageFormat> Field::nestedFormat() const
 {
   if (_type.type != Field::BasicType::NESTED) {
-    throw ParsingException("Not a nested type");
+    throw AccessException("Not a nested type");
   }
   return _type.nested_message;
 }
@@ -153,7 +153,7 @@ std::shared_ptr<MessageFormat> Field::nestedFormat() const
 std::shared_ptr<Field> Field::nestedField(const std::string& name) const
 {
   if (_type.type != Field::BasicType::NESTED) {
-    throw ParsingException("Not a nested type");
+    throw AccessException("Not a nested type");
   }
   return _type.nested_message->field(name);
 }
@@ -190,7 +190,7 @@ std::string Field::encode() const
 Value::NativeTypeVariant Value::asNativeTypeVariant() const
 {
   if (_array_index >= 0 && _field_ref.arrayLength() < 0) {
-    throw ParsingException("Can not access array element of non-array field");
+    throw AccessException("Can not access array element of non-array field");
   }
 
   if (_field_ref.arrayLength() == -1 || _array_index >= 0) {
@@ -235,7 +235,7 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
         return deserialize<char>(_backing_ref_begin, _backing_ref_end, _field_ref.offsetInMessage(),
                                  array_offset);
       case Field::BasicType::NESTED:
-        throw ParsingException("Can't get nested field as basic type. Field " + _field_ref.name());
+        throw AccessException("Can't get nested field as basic type. Field " + _field_ref.name());
     }
   } else {
     // decode as an array
@@ -276,14 +276,14 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
       case Field::BasicType::CHAR: {
         auto string_start_iterator = _backing_ref_begin + _field_ref.offsetInMessage();
         if (_backing_ref_end - string_start_iterator < _field_ref.arrayLength()) {
-          throw ParsingException("Decoding fault, memory too short");
+          throw AccessException("Decoding fault, memory too short");
         }
         int string_length = strnlen(string_start_iterator.base(), _field_ref.arrayLength());
         return std::string(string_start_iterator, string_start_iterator + string_length);
       }
 
       case Field::BasicType::NESTED:
-        throw ParsingException("Can't get nested field as basic type. Field " + _field_ref.name());
+        throw AccessException("Can't get nested field as basic type. Field " + _field_ref.name());
     }
   }
   return deserialize<uint8_t>(_backing_ref_begin, _backing_ref_end, _field_ref.offsetInMessage(),
@@ -293,10 +293,10 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
 Value Value::operator[](const Field& field) const
 {
   if (_field_ref.type().type != Field::BasicType::NESTED) {
-    throw ParsingException("Cannot access field of non-nested type");
+    throw AccessException("Cannot access field of non-nested type");
   }
   if (!_field_ref.definitionResolved()) {
-    throw ParsingException("Cannot access field of unresolved type");
+    throw AccessException("Cannot access field of unresolved type");
   }
   int submessage_offset = _field_ref.offsetInMessage() +
                           ((_array_index >= 0) ? _field_ref.type().size * _array_index : 0);
@@ -312,10 +312,10 @@ Value Value::operator[](const std::shared_ptr<Field>& field) const
 Value Value::operator[](const std::string& field_name) const
 {
   if (_field_ref.type().type != Field::BasicType::NESTED) {
-    throw ParsingException("Cannot access field of non-nested type");
+    throw AccessException("Cannot access field of non-nested type");
   }
   if (!_field_ref.definitionResolved()) {
-    throw ParsingException("Cannot access field of unresolved type");
+    throw AccessException("Cannot access field of unresolved type");
   }
   const auto& field = _field_ref.type().nested_message->field(field_name);
   return operator[](*field);
@@ -324,10 +324,10 @@ Value Value::operator[](const std::string& field_name) const
 Value Value::operator[](size_t index) const
 {
   if (_field_ref.arrayLength() < 0) {
-    throw ParsingException("Cannot access field of non-array type");
+    throw AccessException("Cannot access field of non-array type");
   }
   if (index >= static_cast<size_t>(_field_ref.arrayLength())) {
-    throw ParsingException("Index out of bounds");
+    throw AccessException("Index out of bounds");
   }
   return Value(_field_ref, _backing_ref_begin, _backing_ref_end, index);
 }
