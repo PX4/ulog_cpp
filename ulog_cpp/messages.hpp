@@ -347,7 +347,7 @@ class Value {
               res = arg;
             } else {
               // one is string, the other is not
-              throw ParsingException("Assign strings and non-string types");
+              throw AccessException("Assign strings and non-string types");
             }
           } else if constexpr (is_vector<NativeType>::value) {
             // this is natively a vector
@@ -369,7 +369,7 @@ class Value {
               if (arg.size() > 0) {
                 res = staticCastEnsureUnsignedChar<ReturnType>(arg[0]);
               } else {
-                throw ParsingException("Cannot convert empty vector to non-vector type");
+                throw AccessException("Cannot convert empty vector to non-vector type");
               }
             }
           } else {
@@ -431,7 +431,7 @@ class Value {
     int total_offset = offset + array_offset * sizeof(T);
     if (backing_start > backing_end ||
         backing_end - backing_start - total_offset < static_cast<int64_t>(sizeof(v))) {
-      throw ParsingException("Unexpected data type size");
+      throw AccessException("Unexpected data type size");
     }
     std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v),
               reinterpret_cast<uint8_t*>(&v));

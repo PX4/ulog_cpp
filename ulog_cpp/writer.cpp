@@ -33,7 +33,7 @@ void Writer::messageInfo(const MessageInfo& message_info)
 void Writer::messageFormat(const MessageFormat& message_format)
 {
   if (_header_complete) {
-    throw ParsingException("Header completed, cannot write formats");
+    throw UsageException("Header completed, cannot write formats");
   }
   message_format.serialize(_data_write_cb);
 }
@@ -48,7 +48,7 @@ void Writer::parameterDefault(const ParameterDefault& parameter_default)
 void Writer::addLoggedMessage(const AddLoggedMessage& add_logged_message)
 {
   if (!_header_complete) {
-    throw ParsingException("Header not yet completed, cannot write AddLoggedMessage");
+    throw UsageException("Header not yet completed, cannot write AddLoggedMessage");
   }
   add_logged_message.serialize(_data_write_cb);
 }

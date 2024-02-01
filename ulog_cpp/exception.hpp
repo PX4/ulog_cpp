@@ -34,4 +34,12 @@ class UsageException : public ExceptionBase {
   explicit UsageException(std::string reason) : ExceptionBase(std::move(reason)) {}
 };
 
+/**
+ * Some field/subscription does not exist or index is out of range
+ */
+class AccessException : public ExceptionBase {
+ public:
+  explicit AccessException(std::string reason) : ExceptionBase(std::move(reason)) {}
+};
+
 }  // namespace ulog_cpp
