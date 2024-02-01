@@ -105,14 +105,13 @@ class DataContainer : public DataHandlerInterface {
     return names;
   }
 
-  std::shared_ptr<Subscription> subscription(const std::string& name, int multi_id) const
+  std::shared_ptr<Subscription> subscription(const std::string& name, int multi_id = 0) const
   {
-    return _subscriptions_by_name_and_multi_id.at({name, multi_id});
-  }
-
-  std::shared_ptr<Subscription> subscription(const std::string& name) const
-  {
-    return _subscriptions_by_name_and_multi_id.at({name, 0});
+    const auto it = _subscriptions_by_name_and_multi_id.find({name, multi_id});
+    if (it == _subscriptions_by_name_and_multi_id.end()) {
+      throw AccessException("Subscription not found: " + name);
+    }
+    return it->second;
   }
 
  protected:

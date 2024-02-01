@@ -49,6 +49,7 @@ int main(int argc, char** argv)
   for (const auto& sub : subscription_names) {
     std::cout << sub << "\n";
   }
+  std::cout << "\n";
 
   // Get a particular subscription
   if (subscription_names.find("vehicle_status") != subscription_names.end()) {
@@ -62,30 +63,34 @@ int main(int argc, char** argv)
     std::cout << "Field names: "
               << "\n";
     for (const std::string& field : subscription->fieldNames()) {
-      std::cout << field << "\n";
+      std::cout << "  " << field << "\n";
     }
 
     // Get particular field
-    auto nav_state_field = subscription->field("nav_state");
+    try {
+      auto nav_state_field = subscription->field("nav_state");
 
-    // Iterate over all samples
-    std::cout << "nav_state values: \n";
-    for (const auto& sample : *subscription) {
-      // always correctly extracts the type as defined in the message definition,
-      // gets cast to the value you put in int.
-      // This also works for arrays and strings.
-      auto nav_state = sample[nav_state_field].as<int>();
-      std::cout << nav_state << ", ";
+      // Iterate over all samples
+      std::cout << "nav_state values: \n  ";
+      for (const auto& sample : *subscription) {
+        // always correctly extracts the type as defined in the message definition,
+        // gets cast to the value you put in int.
+        // This also works for arrays and strings.
+        auto nav_state = sample[nav_state_field].as<int>();
+        std::cout << nav_state << ", ";
+      }
+      std::cout << "\n";
+
+      // get a specific sample
+      auto sample_12 = subscription->at(12);
+
+      // access values by name
+      auto timestamp = sample_12["timestamp"].as<uint64_t>();
+
+      std::cout << "timestamp at sample 12: " << timestamp << "\n";
+    } catch (const ulog_cpp::AccessException& exception) {
+      std::cout << "AccessException: " << exception.what() << "\n";
     }
-    std::cout << "\n";
-
-    // get a specific sample
-    auto sample_12 = subscription->at(12);
-
-    // access values by name
-    auto timestamp = sample_12["timestamp"].as<uint64_t>();
-
-    std::cout << timestamp << "\n";
   } else {
     std::cout << "No vehicle_status subscription found\n";
   }
@@ -95,16 +100,20 @@ int main(int argc, char** argv)
     const auto& message_format = data_container->messageFormats().at("esc_status");
     std::cout << "Message format: " << message_format->name() << "\n";
     for (const auto& field_name : message_format->fieldNames()) {
-      std::cout << field_name << "\n";
+      std::cout << "  " << field_name << "\n";
     }
   } else {
     std::cout << "No esc_status message format found\n";
   }
 
   if (subscription_names.find("esc_status") != subscription_names.end()) {
-    auto esc_status = data_container->subscription("esc_status");
-    for (const auto& sample : *esc_status) {
-      std::cout << "esc_power: " << sample["esc"][7]["esc_power"].as<int>() << "\n";
+    try {
+      auto esc_status = data_container->subscription("esc_status");
+      for (const auto& sample : *esc_status) {
+        std::cout << "esc_power: " << sample["esc"][7]["esc_power"].as<int>() << "\n";
+      }
+    } catch (const ulog_cpp::AccessException& exception) {
+      std::cout << "AccessException: " << exception.what() << "\n";
     }
   } else {
     std::cout << "No esc_status subscription found\n";

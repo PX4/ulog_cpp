@@ -259,6 +259,12 @@ TEST_CASE("Write complicated, nested data format, then read it")
       sample[f_child_1][f_c1_c1_2][2][f_c1_c1_2_byte_b].asNativeTypeVariant()));
   CHECK(std::holds_alternative<std::vector<uint64_t>>(
       sample[f_child_1][f_c1_unsigned_long].asNativeTypeVariant()));
+
+  // Check exceptions
+  CHECK_THROWS_AS(sample["non_existent"], ulog_cpp::AccessException);
+  CHECK_THROWS_AS(sample[f_child_1][f_c1_unsigned_long][100], ulog_cpp::AccessException);
+  CHECK_THROWS_AS(data_container->subscription("non_existent_subscription"),
+                  ulog_cpp::AccessException);
 }
 
 TEST_SUITE_END();
