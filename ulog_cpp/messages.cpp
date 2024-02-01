@@ -410,8 +410,8 @@ MessageFormat::MessageFormat(const uint8_t* msg)
 MessageFormat::MessageFormat(std::string name, const std::vector<Field>& fields)
     : _name(std::move(name))
 {
-  for (const auto& field : fields) {
-    auto f = std::make_shared<Field>(field);
+  for (const auto& current_field : fields) {
+    auto f = std::make_shared<Field>(current_field);
     _fields.insert({f->name(), f});
     _fields_ordered.push_back(f);
   }
@@ -430,11 +430,11 @@ void MessageFormat::resolveDefinition(
     const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats) const
 {
   int offset = 0;
-  for (const auto& field : _fields_ordered) {
-    if (!field->definitionResolved()) {
-      field->resolveDefinition(existing_formats, offset);
+  for (const auto& current_field : _fields_ordered) {
+    if (!current_field->definitionResolved()) {
+      current_field->resolveDefinition(existing_formats, offset);
     }
-    offset += field->sizeBytes();
+    offset += current_field->sizeBytes();
   }
 }
 
@@ -442,8 +442,8 @@ void MessageFormat::serialize(const DataWriteCB& writer) const
 {
   std::string format_str = _name + ':';
 
-  for (const auto& field : _fields_ordered) {
-    format_str += field->encode() + ';';
+  for (const auto& current_field : _fields_ordered) {
+    format_str += current_field->encode() + ';';
   }
 
   ulog_message_format_s format;
