@@ -5,7 +5,7 @@
 
 #include "simple_writer.hpp"
 
-#ifdef WINDOWS
+#ifdef _WIN32
 #include <fileapi.h>
 #else
 #include <unistd.h>
@@ -112,7 +112,7 @@ void SimpleWriter::fsync()
 {
   if (_file) {
     fflush(_file);
-#ifdef WINDOWS
+#ifdef _WIN32
     FlushFileBuffers(static_cast<HANDLE>(_fileno(_file)));
 #else
     ::fsync(fileno(_file));
