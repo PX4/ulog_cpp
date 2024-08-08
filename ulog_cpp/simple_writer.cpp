@@ -114,7 +114,7 @@ void SimpleWriter::fsync()
   if (_file) {
     fflush(_file);
 #ifdef _WIN32
-    FlushFileBuffers(static_cast<HANDLE>(_fileno(_file)));
+    FlushFileBuffers(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(_fileno(_file))));
 #else
     ::fsync(fileno(_file));
 #endif
