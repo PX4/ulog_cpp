@@ -5,8 +5,9 @@
 
 #include "simple_writer.hpp"
 
-#ifdef WINDOWS
+#ifdef _WIN32
 #include <fileapi.h>
+#include <windows.h>  // NOLINT
 #else
 #include <unistd.h>
 #endif
@@ -112,8 +113,8 @@ void SimpleWriter::fsync()
 {
   if (_file) {
     fflush(_file);
-#ifdef WINDOWS
-    FlushFileBuffers(static_cast<HANDLE>(_fileno(_file)));
+#ifdef _WIN32
+    FlushFileBuffers(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(_fileno(_file))));
 #else
     ::fsync(fileno(_file));
 #endif

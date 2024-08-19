@@ -278,7 +278,7 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
         if (_backing_ref_end - string_start_iterator < _field_ref.arrayLength()) {
           throw AccessException("Decoding fault, memory too short");
         }
-        int string_length = strnlen(string_start_iterator.base(), _field_ref.arrayLength());
+        const int string_length = strnlen(&(*string_start_iterator), _field_ref.arrayLength());
         return std::string(string_start_iterator, string_start_iterator + string_length);
       }
 
