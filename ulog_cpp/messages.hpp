@@ -586,7 +586,7 @@ class MessageFormat {
   /**
    * @return the list of fields, in-order
    */
-  std::vector<std::shared_ptr<Field>> fields() const { return _fields_ordered; }
+  const std::vector<std::shared_ptr<Field>>& fields() const { return _fields_ordered; }
 
   /**
    * @return the list of field names, in-order
