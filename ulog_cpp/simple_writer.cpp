@@ -6,8 +6,10 @@
 #include "simple_writer.hpp"
 
 #ifdef _WIN32
+// clang-format off
+#include <windows.h>
 #include <fileapi.h>
-#include <windows.h>  // NOLINT
+// clang-format on
 #else
 #include <unistd.h>
 #endif
