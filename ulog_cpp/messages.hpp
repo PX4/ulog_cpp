@@ -430,7 +430,7 @@ class Value {
     T v;
     int total_offset = offset + array_offset * sizeof(T);
     if (backing_start > backing_end ||
-        backing_end - backing_start - total_offset < static_cast<int64_t>(sizeof(v))) {
+        backing_end - backing_start < static_cast<int64_t>(sizeof(v)) + total_offset) {
       throw AccessException("Unexpected data type size");
     }
     std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v),
