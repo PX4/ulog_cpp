@@ -9,7 +9,7 @@
 
 #include "raw_messages.hpp"
 
-#if 0
+#if 0  // NOLINT (readability-avoid-unconditional-preprocessor-if)
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF(...)
