@@ -43,17 +43,17 @@ void DataContainer::headerComplete()
 
   // try to resolve all fields for params
   for (auto& it : _default_parameters) {
-    auto& parameter = it.second;
-    parameter.field().resolveDefinition(_message_formats, 0);
+    auto& parameter_value = it.second;
+    parameter_value.field().resolveDefinition(_message_formats, 0);
   }
 
   for (auto& it : _initial_parameters) {
-    auto& parameter = it.second;
-    parameter.field().resolveDefinition(_message_formats, 0);
+    auto& parameter_value = it.second;
+    parameter_value.field().resolveDefinition(_message_formats, 0);
   }
 
-  for (auto& parameter : _changed_parameters) {
-    parameter.field().resolveDefinition(_message_formats, 0);
+  for (auto& parameter_value : _changed_parameters) {
+    parameter_value.field().resolveDefinition(_message_formats, 0);
   }
 
   _header_complete = true;
@@ -100,10 +100,10 @@ void DataContainer::parameter(const Parameter& parameter_arg)
     return;
   }
   if (_header_complete) {
-    auto parameter = parameter_arg;
+    auto parameter_value = parameter_arg;
     // if header is complete, we can resolve definition here
-    parameter.field().resolveDefinition(_message_formats, 0);
-    _changed_parameters.push_back(parameter);
+    parameter_value.field().resolveDefinition(_message_formats, 0);
+    _changed_parameters.push_back(parameter_value);
   } else {
     _initial_parameters.insert({parameter_arg.field().name(), parameter_arg});
   }
