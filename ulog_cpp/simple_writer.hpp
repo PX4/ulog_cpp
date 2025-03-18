@@ -6,7 +6,15 @@
 
 #include <cstdio>
 #include <memory>
+// GCC 14.2 raises an error in <regex> when building with -fsanitize=address
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 #include <regex>
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 #include <unordered_map>
 #include <vector>
 
