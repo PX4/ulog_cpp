@@ -433,8 +433,17 @@ class Value {
         backing_end - backing_start < static_cast<int64_t>(sizeof(v)) + total_offset) {
       throw AccessException("Unexpected data type size");
     }
+    // GCC 14.2 raises an error here when building with -fsanitize=address
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
     std::copy(backing_start + total_offset, backing_start + total_offset + sizeof(v),
               reinterpret_cast<uint8_t*>(&v));
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
     return v;
   }
 
