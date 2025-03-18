@@ -10,12 +10,14 @@
 
 using namespace std::chrono_literals;
 
-static uint64_t currentTimeUs()
+namespace {
+uint64_t currentTimeUs()
 {
   return std::chrono::duration_cast<std::chrono::microseconds>(
              std::chrono::steady_clock::now().time_since_epoch())
       .count();
 }
+}  // namespace
 
 struct MyData {
   uint64_t timestamp;

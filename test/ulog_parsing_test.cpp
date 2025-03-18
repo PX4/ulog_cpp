@@ -108,8 +108,9 @@ TEST_CASE("ULog parsing - basic test: write then read")
   }
 }
 
-static void readFileWriteTest(const std::filesystem::path& path,
-                              const std::function<unsigned()>& next_chunk_size)
+namespace {
+void readFileWriteTest(const std::filesystem::path& path,
+                       const std::function<unsigned()>& next_chunk_size)
 {
   FILE* file = fopen(path.c_str(), "rb");
   CHECK(file);
@@ -144,6 +145,7 @@ static void readFileWriteTest(const std::filesystem::path& path,
   CHECK_EQ(input_data.size(), written_data.size());
   CHECK_EQ(input_data, written_data);
 }
+}  // namespace
 
 TEST_CASE("ULog parsing - read sample files then write")
 {
@@ -343,7 +345,7 @@ TEST_CASE("ULog parsing - simple writer")
   std::vector<MyData> written_data_messages;
   for (int i = 0; i < 100; ++i) {
     MyData data{};
-    data.timestamp = i * 1000;
+    data.timestamp = static_cast<uint64_t>(i) * 1000;
     data.cpuload = cpuload;
     data.counter = i;
     writer.writeData(my_data_msg_id, data);

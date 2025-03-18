@@ -196,7 +196,7 @@ Value::NativeTypeVariant Value::asNativeTypeVariant() const
   if (_field_ref.arrayLength() == -1 || _array_index >= 0) {
     // decode as a single value. Either it is a single value,
     // or the user has explicitly selected an array element
-    int array_offset = _array_index >= 0 ? _array_index : 0;
+    const int array_offset = _array_index >= 0 ? _array_index : 0;
     switch (_field_ref.type().type) {
       case Field::BasicType::INT8:
         return deserialize<int8_t>(_backing_ref_begin, _backing_ref_end,
@@ -298,8 +298,8 @@ Value Value::operator[](const Field& field) const
   if (!_field_ref.definitionResolved()) {
     throw AccessException("Cannot access field of unresolved type");
   }
-  int submessage_offset = _field_ref.offsetInMessage() +
-                          ((_array_index >= 0) ? _field_ref.type().size * _array_index : 0);
+  const int submessage_offset = _field_ref.offsetInMessage() +
+                                ((_array_index >= 0) ? _field_ref.type().size * _array_index : 0);
 
   return Value(field, _backing_ref_begin + submessage_offset, _backing_ref_end);
 }

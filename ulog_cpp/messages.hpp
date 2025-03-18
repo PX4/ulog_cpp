@@ -172,25 +172,25 @@ class Field {
    * @brief Get the type attributes of the field
    * @return The type attributes
    */
-  inline const TypeAttributes& type() const { return _type; }
+  const TypeAttributes& type() const { return _type; }
 
   /**
    * @brief Get the array length of the field
    * @return The array length, -1 if not an array
    */
-  inline int arrayLength() const { return _array_length; }
+  int arrayLength() const { return _array_length; }
 
   /**
    * @brief Get the offset of the field in the message. This is only valid if the field is resolved.
    * @return The offset in bytes, -1 if not resolved
    */
-  inline int offsetInMessage() const { return _offset_in_message_bytes; }
+  int offsetInMessage() const { return _offset_in_message_bytes; }
 
   /**
    * @brief Get the name of the field
    * @return The name
    */
-  inline const std::string& name() const { return _name; }
+  const std::string& name() const { return _name; }
 
   /**
    * @brief Get the size of the field in bytes. This is only valid if the field is resolved.
@@ -203,11 +203,11 @@ class Field {
    * is defined and the type is not nested or the nested message is resolved.
    * @return True if the field is resolved
    */
-  inline bool definitionResolved() const
+  bool definitionResolved() const
   {
     return _offset_in_message_bytes >= 0 &&
            (_type.type != BasicType::NESTED || _type.nested_message != nullptr);
-  };
+  }
 
   /**
    * @brief Attempt to resolve the definition of the field.
@@ -353,8 +353,8 @@ class Value {
             // this is natively a vector
             if constexpr (is_vector<ReturnType>::value) {
               // return type is also vector
-              if constexpr (std::is_same<typename NativeType::value_type,
-                                         typename ReturnType::value_type>::value) {
+              if constexpr (std::is_same_v<typename NativeType::value_type,
+                                           typename ReturnType::value_type>) {
                 // return type is same as native type
                 res = arg;
               } else {
@@ -428,7 +428,7 @@ class Value {
                        int array_offset)
   {
     T v;
-    int total_offset = offset + array_offset * sizeof(T);
+    const int total_offset = offset + (array_offset * sizeof(T));
     if (backing_start > backing_end ||
         backing_end - backing_start < static_cast<int64_t>(sizeof(v)) + total_offset) {
       throw AccessException("Unexpected data type size");
@@ -603,6 +603,7 @@ class MessageFormat {
   std::vector<std::string> fieldNames() const
   {
     std::vector<std::string> names;
+    names.reserve(_fields_ordered.size());
     for (const auto& field_it : _fields_ordered) {
       names.push_back(field_it->name());
     }
