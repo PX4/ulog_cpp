@@ -18,6 +18,27 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(ulog_cpp)
 
 if(MAIN_PROJECT)
+	include(CMakePackageConfigHelpers)
+
+	write_basic_package_version_file(
+		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+		VERSION 1.0.0
+		COMPATIBILITY AnyNewerVersion
+	)
+
+	configure_package_config_file(
+		"${CMAKE_CURRENT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
+		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+		INSTALL_DESTINATION lib/cmake/${PROJECT_NAME}
+	)
+
+	install(FILES
+		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+		DESTINATION lib/cmake/${PROJECT_NAME}
+	)
+
+
 	add_compile_options(
 		# Warnings
 		-Wall
