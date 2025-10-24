@@ -24,7 +24,7 @@ int main(int argc, char** argv)
     printf("opening file failed\n");
     return -1;
   }
-  uint8_t buffer[4048];
+  uint8_t buffer[4096];
   int bytes_read;
   const auto data_container =
       std::make_shared<ulog_cpp::DataContainer>(ulog_cpp::DataContainer::StorageConfig::FullLog);

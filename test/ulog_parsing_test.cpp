@@ -123,7 +123,7 @@ void readFileWriteTest(const std::filesystem::path& path,
   });
 
   std::vector<uint8_t> input_data;
-  uint8_t buffer[4048];
+  uint8_t buffer[4096];
   int bytes_read;
   ulog_cpp::Reader reader{writer};
   while ((bytes_read =
