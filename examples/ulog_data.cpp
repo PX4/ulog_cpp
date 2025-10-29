@@ -9,6 +9,8 @@
 #include <ulog_cpp/data_container.hpp>
 #include <ulog_cpp/reader.hpp>
 
+// Example of how to use the typed data API for accessing topic data
+
 int main(int argc, char** argv)
 {
   if (argc < 2) {

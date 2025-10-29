@@ -8,6 +8,8 @@
 #include <thread>
 #include <ulog_cpp/simple_writer.hpp>
 
+// Example of how to create an ULog file with timeseries, printf messages and parameters
+
 using namespace std::chrono_literals;
 
 namespace {

@@ -14,3 +14,8 @@ add_executable(ulog_writer ulog_writer.cpp)
 target_link_libraries(ulog_writer PUBLIC
 	ulog_cpp::ulog_cpp
 )
+
+add_executable(ulog_streamed_parsing ulog_streamed_parsing.cpp)
+target_link_libraries(ulog_streamed_parsing PUBLIC
+		ulog_cpp::ulog_cpp
+)
