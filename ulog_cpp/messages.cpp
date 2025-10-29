@@ -68,6 +68,10 @@ MessageInfo::MessageInfo(const uint8_t* msg, bool is_multi) : _is_multi(is_multi
     _field = Field(info->key_value_str, info->key_len);
     initValues(info->key_value_str + info->key_len, info->msg_size - info->key_len - 1);
   }
+  if (_field.type().type != Field::BasicType::NESTED) {
+    // For basic types we can resolve the definition immediately
+    _field.resolveDefinition(0);
+  }
 }
 void MessageInfo::initValues(const char* values, int len)
 {
@@ -468,6 +472,10 @@ ParameterDefault::ParameterDefault(const uint8_t* msg)
   _field = Field(param_default->key_value_str, param_default->key_len);
   initValues(param_default->key_value_str + param_default->key_len,
              param_default->msg_size - param_default->key_len - 2);
+  if (_field.type().type != Field::BasicType::NESTED) {
+    // For basic types we can resolve the definition immediately
+    _field.resolveDefinition(0);
+  }
 }
 void ParameterDefault::initValues(const char* values, int len)
 {
