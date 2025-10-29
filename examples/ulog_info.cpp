@@ -13,6 +13,8 @@
 #include <ulog_cpp/reader.hpp>
 #include <variant>
 
+// Example of how to access the different data messages (info, logging, parameters, subscriptions)
+
 int main(int argc, char** argv)
 {
   if (argc < 2) {
