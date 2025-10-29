@@ -17,6 +17,25 @@ Streamed C++ [ULog](https://docs.px4.io/main/en/dev_log/ulog_file_format.html) r
 Check the [examples](examples) subdirectory.
 
 ## Include in a project
+### Using cmake FetchContent
+To use the library with `FetchContent` in cmake, add the following to the `CMakeLists.txt`:
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  ulog_cpp
+  GIT_REPOSITORY https://github.com/PX4/ulog_cpp.git
+  GIT_TAG v1.0.0
+  SYSTEM
+  EXCLUDE_FROM_ALL)
+
+FetchContent_MakeAvailable(ulog_cpp)
+
+target_link_libraries(YOUR_PROJECT PUBLIC
+        ulog_cpp::ulog_cpp
+)
+```
+
+### As a submodule
 To add the library as a submodule with cmake, use the following steps:
 ```shell
 git submodule add https://github.com/PX4/ulog_cpp.git ulog_cpp
