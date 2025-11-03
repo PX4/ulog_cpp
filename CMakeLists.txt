@@ -1,42 +1,54 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
-project(ulog_cpp LANGUAGES CXX)
+project(ulog_cpp
+    VERSION 1.0.0
+    LANGUAGES CXX
+    DESCRIPTION "C++ library for handling ULog files"
+)
 
-# Determine if ulog_cpp is built as a subproject (using add_subdirectory) or if it is the main project.
-set(MAIN_PROJECT OFF)
-if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    set(MAIN_PROJECT ON)
-endif()
+include(CMakeDependentOption)
+
+cmake_dependent_option(ULOG_CPP_INSTALL "Install the ulog_cpp folder to include/ during install process"
+		ON "CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME" OFF)
+cmake_dependent_option(ULOG_CPP_BUILD_TESTS "Build ulog_cpp tests" ON
+		"CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME" OFF)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(ulog_cpp)
 
-if(MAIN_PROJECT)
+# Only create and install the config files if this is the main project
+if(ULOG_CPP_INSTALL)
+	include(GNUInstallDirs)
 	include(CMakePackageConfigHelpers)
 
-	write_basic_package_version_file(
-		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-		VERSION 1.0.0
-		COMPATIBILITY AnyNewerVersion
-	)
+    # Create a config file that includes the export
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+    )
 
-	configure_package_config_file(
-		"${CMAKE_CURRENT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
-		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-		INSTALL_DESTINATION lib/cmake/${PROJECT_NAME}
-	)
+    # Create a version file
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
 
-	install(FILES
-		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-		"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-		DESTINATION lib/cmake/${PROJECT_NAME}
-	)
+    # Install the config files
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+    )
 
 
 	add_compile_options(
@@ -69,7 +81,10 @@ if(MAIN_PROJECT)
 	include(clang_format)
 
 	add_subdirectory(examples)
-	add_subdirectory(test)
+
+	if (ULOG_CPP_BUILD_TESTS)
+		add_subdirectory(test)
+	endif()
 
 endif()
 
