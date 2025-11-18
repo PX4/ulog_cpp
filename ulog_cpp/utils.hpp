@@ -48,8 +48,7 @@ template <typename T>
 struct is_vector : std::false_type {  // NOLINT(*-identifier-naming)
 };
 template <typename T>
-struct is_vector<std::vector<T>> : std::true_type {
-};
+struct is_vector<std::vector<T>> : std::true_type {};
 
 /**
  * SFINAE helper to check if a type is a string
