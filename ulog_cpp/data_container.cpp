@@ -7,6 +7,39 @@
 
 namespace ulog_cpp {
 
+namespace {
+
+/**
+ * The logger commonly omits trailing alignment padding (_padding0, etc.) from the
+ * on-wire Data payload - it carries no information, so there's no point spending log
+ * space on it. The FORMAT definition still lists it, since it describes the full
+ * in-memory struct layout. MessageFormat::sizeBytes() sums every field including
+ * padding, so it overcounts the real minimum wire size for any format that has
+ * trailing padding.
+ */
+int minWireSizeBytes(const MessageFormat& format)
+{
+  // Field::sizeBytes() is declared inline but defined out-of-line in messages.cpp,
+  // and this toolchain doesn't emit an externally-linkable copy of it - it only
+  // resolves when called from within messages.cpp itself. So instead of subtracting
+  // per-field sizes, take the full (padding-included) size from
+  // MessageFormat::sizeBytes() and subtract the trailing padding fields' sizes
+  // directly via arrayLength(), which is defined inline in the header and always
+  // safe to call. Every _padding* field observed is a uint8_t[N] array, so its size
+  // is exactly its array length.
+  const auto& fields = format.fields();
+  int end = static_cast<int>(fields.size());
+  int padding_bytes = 0;
+  while (end > 0 && fields[end - 1]->name().rfind("_padding", 0) == 0) {
+    const auto array_length = fields[end - 1]->arrayLength();
+    padding_bytes += (array_length > 0) ? array_length : 1;
+    --end;
+  }
+  return format.sizeBytes() - padding_bytes;
+}
+
+}  // namespace
+
 DataContainer::DataContainer(DataContainer::StorageConfig storage_config)
     : _storage_config(storage_config)
 {
@@ -156,7 +189,39 @@ void DataContainer::data(const Data& data)
   if (iter == _subscriptions_by_message_id.end()) {
     throw ParsingException("Invalid subscription");
   }
+
+  // Guard against a Data message whose payload doesn't belong to this subscription's
+  // format at all. This can happen when the byte stream desyncs around a
+  // corrupted/dropped region: the framing (msg_size/msg_type/msg_id) can still look
+  // superficially valid while the payload actually belongs to a different message
+  // entirely. Without this check such a message would be silently decoded using the
+  // wrong field layout (reading garbage as e.g. a timestamp/float), rather than being
+  // discarded. Reader::tryToRecover() also calls isValidDataMessage() with this same
+  // logic before ever accepting such a candidate as a resync point in the first place -
+  // this check here is a defense-in-depth backstop for the (normally unreachable) case
+  // of a bad message slipping through outside of recovery.
+  if (!isValidDataMessage(data.msgId(), static_cast<uint16_t>(data.data().size()))) {
+    const auto& format = *iter->second->format();
+    throw ParsingException(
+      "Invalid data size for msg_id=" + std::to_string(data.msgId()) +
+      " (" + iter->second->getAddLoggedMessage().messageName() +
+      ") has size " + std::to_string(data.data().size()) +
+      ", expected between " + std::to_string(minWireSizeBytes(format)) +
+      " and " + std::to_string(format.sizeBytes())
+    );
+  }
+
   iter->second->emplaceSample(std::move(data));
+}
+bool DataContainer::isValidDataMessage(uint16_t msg_id, uint16_t payload_size) const
+{
+  const auto iter = _subscriptions_by_message_id.find(msg_id);
+  if (iter == _subscriptions_by_message_id.end()) {
+    return false;
+  }
+  const auto& format = *iter->second->format();
+  const auto actual_size = static_cast<int>(payload_size);
+  return actual_size >= minWireSizeBytes(format) && actual_size <= format.sizeBytes();
 }
 void DataContainer::dropout(const Dropout& dropout)
 {

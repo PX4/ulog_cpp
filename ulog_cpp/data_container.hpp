@@ -62,6 +62,7 @@ class DataContainer : public DataHandlerInterface {
   void logging(const Logging& logging) override;
   void data(const Data& data) override;
   void dropout(const Dropout& dropout) override;
+  bool isValidDataMessage(uint16_t msg_id, uint16_t payload_size) const override;
 
   // Stored data
   bool isHeaderComplete() const { return _header_complete; }

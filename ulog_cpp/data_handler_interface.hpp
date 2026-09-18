@@ -28,6 +28,19 @@ class DataHandlerInterface {
   virtual void dropout(const Dropout& dropout) {}
   virtual void sync(const Sync& sync) {}
 
+  /**
+   * Used by Reader's corruption-recovery search to check a candidate byte offset that
+   * looks like it could be the start of a DATA message before accepting it as a resync
+   * point. Reader has no knowledge of subscriptions/formats itself, so it delegates the
+   * check here. Default is permissive (accepts everything) so implementations that don't
+   * override it keep the previous behavior.
+   * @param msg_id the candidate message's embedded msg_id
+   * @param payload_size the candidate message's payload size (msg_size minus the 2-byte
+   * msg_id)
+   * @return true if msg_id is a known subscription and payload_size is plausible for it
+   */
+  virtual bool isValidDataMessage(uint16_t msg_id, uint16_t payload_size) const { return true; }
+
  private:
 };
 

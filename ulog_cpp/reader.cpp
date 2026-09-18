@@ -207,8 +207,35 @@ void Reader::tryToRecover(const uint8_t* data, int length)
         if (header->msg_size != 0 && header->msg_type != 0 && header->msg_size < 10000 &&
             kKnownMessageTypes.find(static_cast<ULogMessageType>(header->msg_type)) !=
                 kKnownMessageTypes.end()) {
-          found = true;
-          break;
+          // A DATA candidate additionally has to reference a real subscription with a
+          // plausible payload size for it - the checks above alone (known type + size
+          // cap) are satisfied by a lot of unrelated byte patterns, and DATA messages
+          // are by far the most common type, so without this a resync can easily lock
+          // onto the wrong offset: bytes that happen to look like a Data header for some
+          // other message entirely, rather than the true next message. See
+          // DataHandlerInterface::isValidDataMessage().
+          bool candidate_valid = true;
+          if (static_cast<ULogMessageType>(header->msg_type) == ULogMessageType::DATA) {
+            if (header->msg_size < 2 ||
+                _partial_message_buffer_length - index <
+                    static_cast<int>(sizeof(ulog_message_header_s)) + 2) {
+              // Too small to even hold the 2-byte msg_id, or not enough buffered data
+              // yet to see it - can't validate this candidate, so don't accept it
+              // (more data may still arrive for a later pass).
+              candidate_valid = false;
+            } else {
+              uint16_t candidate_msg_id = 0;
+              memcpy(&candidate_msg_id, _partial_message_buffer + index + sizeof(ulog_message_header_s),
+                     sizeof(candidate_msg_id));
+              const auto candidate_payload_size = static_cast<uint16_t>(header->msg_size - 2);
+              candidate_valid =
+                  _data_handler_interface->isValidDataMessage(candidate_msg_id, candidate_payload_size);
+            }
+          }
+          if (candidate_valid) {
+            found = true;
+            break;
+          }
         }
       }
 
