@@ -430,6 +430,19 @@ int MessageFormat::sizeBytes() const
   return size;
 }
 
+int MessageFormat::minWireSizeBytes() const
+{
+  int end = static_cast<int>(_fields_ordered.size());
+  while (end > 0 && _fields_ordered[end - 1]->name().rfind("_padding", 0) == 0) {
+    --end;
+  }
+  int size = 0;
+  for (int i = 0; i < end; ++i) {
+    size += _fields_ordered[i]->sizeBytes();
+  }
+  return size;
+}
+
 void MessageFormat::resolveDefinition(
     const std::map<std::string, std::shared_ptr<MessageFormat>>& existing_formats) const
 {

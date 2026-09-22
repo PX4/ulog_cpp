@@ -32,8 +32,7 @@ class DataHandlerInterface {
    * Used by Reader's corruption-recovery search to check a candidate byte offset that
    * looks like it could be the start of a DATA message before accepting it as a resync
    * point. Reader has no knowledge of subscriptions/formats itself, so it delegates the
-   * check here. Default is permissive (accepts everything) so implementations that don't
-   * override it keep the previous behavior.
+   * check here. Default is permissive (accepts everything).
    * @param msg_id the candidate message's embedded msg_id
    * @param payload_size the candidate message's payload size (msg_size minus the 2-byte
    * msg_id)
