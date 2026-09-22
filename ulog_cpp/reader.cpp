@@ -216,20 +216,20 @@ void Reader::tryToRecover(const uint8_t* data, int length)
           // DataHandlerInterface::isValidDataMessage().
           bool candidate_valid = true;
           if (static_cast<ULogMessageType>(header->msg_type) == ULogMessageType::DATA) {
-            if (header->msg_size < 2 ||
-                _partial_message_buffer_length - index <
-                    static_cast<int>(sizeof(ulog_message_header_s)) + 2) {
+            if (header->msg_size < 2 || _partial_message_buffer_length - index <
+                                            static_cast<int>(sizeof(ulog_message_header_s)) + 2) {
               // Too small to even hold the 2-byte msg_id, or not enough buffered data
               // yet to see it - can't validate this candidate, so don't accept it
               // (more data may still arrive for a later pass).
               candidate_valid = false;
             } else {
               uint16_t candidate_msg_id = 0;
-              memcpy(&candidate_msg_id, _partial_message_buffer + index + sizeof(ulog_message_header_s),
+              memcpy(&candidate_msg_id,
+                     _partial_message_buffer + index + sizeof(ulog_message_header_s),
                      sizeof(candidate_msg_id));
               const auto candidate_payload_size = static_cast<uint16_t>(header->msg_size - 2);
-              candidate_valid =
-                  _data_handler_interface->isValidDataMessage(candidate_msg_id, candidate_payload_size);
+              candidate_valid = _data_handler_interface->isValidDataMessage(candidate_msg_id,
+                                                                            candidate_payload_size);
             }
           }
           if (candidate_valid) {

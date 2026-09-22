@@ -202,13 +202,11 @@ void DataContainer::data(const Data& data)
   // of a bad message slipping through outside of recovery.
   if (!isValidDataMessage(data.msgId(), static_cast<uint16_t>(data.data().size()))) {
     const auto& format = *iter->second->format();
-    throw ParsingException(
-      "Invalid data size for msg_id=" + std::to_string(data.msgId()) +
-      " (" + iter->second->getAddLoggedMessage().messageName() +
-      ") has size " + std::to_string(data.data().size()) +
-      ", expected between " + std::to_string(minWireSizeBytes(format)) +
-      " and " + std::to_string(format.sizeBytes())
-    );
+    throw ParsingException("Invalid data size for msg_id=" + std::to_string(data.msgId()) + " (" +
+                           iter->second->getAddLoggedMessage().messageName() + ") has size " +
+                           std::to_string(data.data().size()) + ", expected between " +
+                           std::to_string(minWireSizeBytes(format)) + " and " +
+                           std::to_string(format.sizeBytes()));
   }
 
   iter->second->emplaceSample(std::move(data));
