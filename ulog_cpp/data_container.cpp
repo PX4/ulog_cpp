@@ -156,7 +156,37 @@ void DataContainer::data(const Data& data)
   if (iter == _subscriptions_by_message_id.end()) {
     throw ParsingException("Invalid subscription");
   }
+
+  // Guard against a Data message whose payload doesn't belong to this subscription's
+  // format at all. This can happen when the byte stream desyncs around a
+  // corrupted/dropped region: the framing (msg_size/msg_type/msg_id) can still look
+  // superficially valid while the payload actually belongs to a different message
+  // entirely. Without this check such a message would be silently decoded using the
+  // wrong field layout (reading garbage as e.g. a timestamp/float), rather than being
+  // discarded. Reader::tryToRecover() also calls isValidDataMessage() with this same
+  // logic before ever accepting such a candidate as a resync point in the first place -
+  // this check here is a defense-in-depth backstop for the (normally unreachable) case
+  // of a bad message slipping through outside of recovery.
+  if (!isValidDataMessage(data.msgId(), static_cast<uint16_t>(data.data().size()))) {
+    const auto& format = *iter->second->format();
+    throw ParsingException("Invalid data size for msg_id=" + std::to_string(data.msgId()) + " (" +
+                           iter->second->getAddLoggedMessage().messageName() + ") has size " +
+                           std::to_string(data.data().size()) + ", expected between " +
+                           std::to_string(format.minWireSizeBytes()) + " and " +
+                           std::to_string(format.sizeBytes()));
+  }
+
   iter->second->emplaceSample(std::move(data));
+}
+bool DataContainer::isValidDataMessage(uint16_t msg_id, uint16_t payload_size) const
+{
+  const auto iter = _subscriptions_by_message_id.find(msg_id);
+  if (iter == _subscriptions_by_message_id.end()) {
+    return false;
+  }
+  const auto& format = *iter->second->format();
+  const auto actual_size = static_cast<int>(payload_size);
+  return actual_size >= format.minWireSizeBytes() && actual_size <= format.sizeBytes();
 }
 void DataContainer::dropout(const Dropout& dropout)
 {

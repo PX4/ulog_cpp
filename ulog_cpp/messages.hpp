@@ -593,6 +593,21 @@ class MessageFormat {
   int sizeBytes() const;
 
   /**
+   * Returns the minimum size of this MessageFormat in bytes as it can appear on the wire in a
+   * Data message. This is only valid once the MessageFormat has been resolved (see sizeBytes()).
+   *
+   * ULog allows to omits trailing alignment padding fields (_padding0, etc.) from the
+   * on-wire Data payload, since they carry no information - the FORMAT definition still lists
+   * them because it describes the full in-memory struct layout (needed e.g. to correctly compute
+   * offsets when this format is used as a nested type in an array). sizeBytes() sums every field
+   * including such trailing padding, so it's an upper bound; this is the corresponding lower
+   * bound. A real Data message's payload size should fall within [minWireSizeBytes(),
+   * sizeBytes()].
+   * @return the minimum size of this MessageFormat on the wire, in bytes
+   */
+  int minWireSizeBytes() const;
+
+  /**
    * @return the list of fields, in-order
    */
   const std::vector<std::shared_ptr<Field>>& fields() const { return _fields_ordered; }

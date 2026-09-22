@@ -266,6 +266,92 @@ TEST_CASE("ULog parsing - test corruption")
   }
 }
 
+TEST_CASE("ULog parsing - corruption recovery rejects wrong-size data for a known msg_id")
+{
+  // Same technique as the "test corruption" case above, but instead of only inserting zero
+  // bytes, follow them with a fabricated Data message header: known msg_type, plausible
+  // msg_size, and even the SAME msg_id as a real subscription - but with a payload size that
+  // doesn't match that subscription's format. Before the isValidDataMessage() fix,
+  // tryToRecover() would accept this as a valid resync point purely because it looks
+  // superficially plausible, and it would end up stored as a corrupted sample. The fix must
+  // reject it and instead recover at the next genuine message.
+  std::vector<uint8_t> injected_bytes;
+  std::vector<uint8_t> written_data;
+  TestWriter writer([&](const uint8_t* data, int length) {
+    if (!injected_bytes.empty()) {
+      written_data.insert(written_data.end(), injected_bytes.begin(), injected_bytes.end());
+      injected_bytes.clear();
+    }
+    const int prev_size = written_data.size();
+    written_data.resize(written_data.size() + length);
+    memcpy(written_data.data() + prev_size, data, length);
+  });
+
+  // A tiny, unpadded format (8 + 4 = 12 bytes), so its on-wire size is unambiguous.
+  const ulog_cpp::MessageFormat format{"target_message",
+                                       {{"uint64_t", "timestamp"}, {"float", "value"}}};
+  const uint16_t msg_id = 1;
+  const ulog_cpp::AddLoggedMessage add_logged_message{0, msg_id, "target_message"};
+
+  auto make_data = [&](uint64_t timestamp, float value) {
+    std::vector<uint8_t> bytes(12);
+    memcpy(bytes.data(), &timestamp, sizeof(timestamp));
+    memcpy(bytes.data() + sizeof(timestamp), &value, sizeof(value));
+    return ulog_cpp::Data{msg_id, bytes};
+  };
+  const auto data1 = make_data(100, 1.5F);
+  const auto data2 = make_data(200, 2.5F);
+
+  writer.fileHeader(ulog_cpp::FileHeader{});
+  writer.messageFormat(format);
+  writer.headerComplete();
+  writer.addLoggedMessage(add_logged_message);
+  writer.data(data1);
+
+  // Zero run to trigger corruptionDetected(), followed by the fabricated candidate.
+  injected_bytes.resize(50, 0);
+  const uint16_t fake_payload_size = 20;                 // target_message's real payload size is 12
+  const uint16_t fake_msg_size = fake_payload_size + 2;  // + 2-byte msg_id
+  auto append_u16 = [&](uint16_t v) {
+    injected_bytes.push_back(static_cast<uint8_t>(v & 0xFF));
+    injected_bytes.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+  };
+  append_u16(fake_msg_size);
+  injected_bytes.push_back('D');  // ULogMessageType::DATA
+  append_u16(msg_id);             // the SAME msg_id as the real subscription above
+  // Fill the (wrong-size) payload with a byte value that can't be mistaken for any known
+  // msg_type character at any scan offset, so the search deterministically skips through it.
+  injected_bytes.resize(injected_bytes.size() + fake_payload_size, 0xAA);
+
+  writer.data(data2);  // flushes injected_bytes first, then the genuine next message
+
+  REQUIRE_GT(written_data.size(), 0);
+  REQUIRE_EQ(writer.num_errors, 0);
+
+  // Read it
+  const auto data_container =
+      std::make_shared<ulog_cpp::DataContainer>(ulog_cpp::DataContainer::StorageConfig::FullLog);
+  ulog_cpp::Reader reader{data_container};
+  // As in the "test corruption" case above: if recovery completes with no remaining
+  // external bytes to process (length == 0 at the point tryToRecover's recursive
+  // readChunk() call runs), the just-recovered message stays buffered but unprocessed
+  // until a later readChunk() call with length > 0 flushes it - readChunk()'s main loop
+  // only runs while length > 0. So a second, small trailing call is needed here too.
+  const int last_chunk_size = 5;
+  reader.readChunk(written_data.data(), written_data.size() - last_chunk_size);
+  reader.readChunk(written_data.data() + written_data.size() - last_chunk_size, last_chunk_size);
+
+  // Expected to have errors, but not be fatal
+  CHECK_GT(data_container->parsingErrors().size(), 0);
+  REQUIRE_FALSE(data_container->hadFatalError());
+
+  // The fabricated wrong-size candidate must NOT have been accepted as a third sample.
+  const auto& samples = data_container->subscriptionsByMessageId().at(msg_id)->rawSamples();
+  REQUIRE_EQ(samples.size(), 2);
+  CHECK_EQ(data1, samples[0]);
+  CHECK_EQ(data2, samples[1]);
+}
+
 struct MyData {
   uint64_t timestamp;
   float debug_array[4];
