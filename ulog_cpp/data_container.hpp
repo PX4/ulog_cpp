@@ -18,7 +18,7 @@ namespace ulog_cpp {
 class DataContainer : public DataHandlerInterface {
  public:
   enum class StorageConfig {
-    Header,   ///< keep header in memory
+    Header,   ///< keep header in memory (subscriptions are still kept without samples)
     FullLog,  ///< keep full log in memory
   };
 
