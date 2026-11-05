@@ -352,6 +352,124 @@ TEST_CASE("ULog parsing - corruption recovery rejects wrong-size data for a know
   CHECK_EQ(data2, samples[1]);
 }
 
+namespace {
+// Streaming consumer in Header storage mode (like a converter that writes each sample out
+// immediately). Records only the samples the base class accepted: if DataContainer::data()
+// throws, the exception propagates to the Reader, as it would in a real consumer.
+class HeaderModeCollector : public ulog_cpp::DataContainer {
+ public:
+  HeaderModeCollector() : ulog_cpp::DataContainer(ulog_cpp::DataContainer::StorageConfig::Header) {}
+  void data(const ulog_cpp::Data& data) override
+  {
+    ulog_cpp::DataContainer::data(data);
+    accepted.push_back(data);
+  }
+  std::vector<ulog_cpp::Data> accepted;
+};
+
+// Writes a file with one 12-byte "target_message" subscription: data1, then whatever
+// 'injected' holds (raw bytes), then data2.
+std::vector<uint8_t> writeFileWithInjectedBytes(const std::vector<uint8_t>& injected,
+                                                ulog_cpp::Data& data1, ulog_cpp::Data& data2)
+{
+  std::vector<uint8_t> injected_bytes;
+  std::vector<uint8_t> written_data;
+  TestWriter writer([&](const uint8_t* data, int length) {
+    if (!injected_bytes.empty()) {
+      written_data.insert(written_data.end(), injected_bytes.begin(), injected_bytes.end());
+      injected_bytes.clear();
+    }
+    const int prev_size = written_data.size();
+    written_data.resize(written_data.size() + length);
+    memcpy(written_data.data() + prev_size, data, length);
+  });
+
+  const ulog_cpp::MessageFormat format{"target_message",
+                                       {{"uint64_t", "timestamp"}, {"float", "value"}}};
+  const uint16_t msg_id = 1;
+  auto make_data = [&](uint64_t timestamp, float value) {
+    std::vector<uint8_t> bytes(12);
+    memcpy(bytes.data(), &timestamp, sizeof(timestamp));
+    memcpy(bytes.data() + sizeof(timestamp), &value, sizeof(value));
+    return ulog_cpp::Data{msg_id, bytes};
+  };
+  data1 = make_data(100, 1.5F);
+  data2 = make_data(200, 2.5F);
+
+  writer.fileHeader(ulog_cpp::FileHeader{});
+  writer.messageFormat(format);
+  writer.headerComplete();
+  writer.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, msg_id, "target_message"});
+  writer.data(data1);
+  injected_bytes = injected;
+  writer.data(data2);  // flushes injected_bytes first
+  REQUIRE_EQ(writer.num_errors, 0);
+  return written_data;
+}
+
+// A Data message header for msg_id 1 with a payload of 'payload_size' bytes of 0xAA.
+std::vector<uint8_t> fabricatedDataMessage(uint16_t payload_size)
+{
+  std::vector<uint8_t> bytes;
+  const uint16_t msg_size = payload_size + 2;  // + 2-byte msg_id
+  bytes.push_back(static_cast<uint8_t>(msg_size & 0xFF));
+  bytes.push_back(static_cast<uint8_t>(msg_size >> 8));
+  bytes.push_back('D');
+  bytes.push_back(1);
+  bytes.push_back(0);
+  bytes.resize(bytes.size() + payload_size, 0xAA);
+  return bytes;
+}
+
+void readInTwoChunks(ulog_cpp::Reader& reader, std::vector<uint8_t>& written_data)
+{
+  // See the corruption tests above for why a small trailing chunk is needed after recovery.
+  const int last_chunk_size = 5;
+  reader.readChunk(written_data.data(), written_data.size() - last_chunk_size);
+  reader.readChunk(written_data.data() + written_data.size() - last_chunk_size, last_chunk_size);
+}
+}  // namespace
+
+TEST_CASE("ULog parsing - Header storage mode recovers on the next genuine data message")
+{
+  // Zero run between two valid samples. Header mode doesn't create subscriptions, so before
+  // the fix isValidDataMessage() rejected every DATA candidate and recovery skipped past all
+  // following data messages (data2 was lost).
+  ulog_cpp::Data data1{0, {}};
+  ulog_cpp::Data data2{0, {}};
+  auto written_data = writeFileWithInjectedBytes(std::vector<uint8_t>(50, 0), data1, data2);
+
+  const auto collector = std::make_shared<HeaderModeCollector>();
+  ulog_cpp::Reader reader{collector};
+  readInTwoChunks(reader, written_data);
+
+  CHECK_GT(collector->parsingErrors().size(), 0);
+  REQUIRE_FALSE(collector->hadFatalError());
+  REQUIRE_EQ(collector->accepted.size(), 2);
+  CHECK_EQ(data1, collector->accepted[0]);
+  CHECK_EQ(data2, collector->accepted[1]);
+}
+
+TEST_CASE("ULog parsing - Header storage mode rejects wrong-size data for a known msg_id")
+{
+  // A well-framed Data message for the known msg_id, but with a 20-byte payload where the
+  // format needs 12. No zero run, so this is parsed in the normal path (not recovery). Before
+  // the fix, Header mode skipped the size check and the consumer received it.
+  ulog_cpp::Data data1{0, {}};
+  ulog_cpp::Data data2{0, {}};
+  auto written_data = writeFileWithInjectedBytes(fabricatedDataMessage(20), data1, data2);
+
+  const auto collector = std::make_shared<HeaderModeCollector>();
+  ulog_cpp::Reader reader{collector};
+  readInTwoChunks(reader, written_data);
+
+  CHECK_GT(collector->parsingErrors().size(), 0);
+  REQUIRE_FALSE(collector->hadFatalError());
+  REQUIRE_EQ(collector->accepted.size(), 2);
+  CHECK_EQ(data1, collector->accepted[0]);
+  CHECK_EQ(data2, collector->accepted[1]);
+}
+
 struct MyData {
   uint64_t timestamp;
   float debug_array[4];

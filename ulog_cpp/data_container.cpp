@@ -119,9 +119,8 @@ void DataContainer::parameterDefault(const ParameterDefault& parameter_default_a
 }
 void DataContainer::addLoggedMessage(const AddLoggedMessage& add_logged_message)
 {
-  if (_header_complete && _storage_config == StorageConfig::Header) {
-    return;
-  }
+  // Subscriptions are always created, also in Header mode (without samples), so that
+  // data messages can be validated against their format.
   if (_subscriptions_by_message_id.find(add_logged_message.msgId()) !=
       _subscriptions_by_message_id.end()) {
     throw ParsingException("Duplicate AddLoggedMessage message ID");
@@ -149,9 +148,6 @@ void DataContainer::logging(const Logging& logging)
 }
 void DataContainer::data(const Data& data)
 {
-  if (_storage_config == StorageConfig::Header) {
-    return;
-  }
   const auto& iter = _subscriptions_by_message_id.find(data.msgId());
   if (iter == _subscriptions_by_message_id.end()) {
     throw ParsingException("Invalid subscription");
@@ -176,6 +172,9 @@ void DataContainer::data(const Data& data)
                            std::to_string(format.sizeBytes()));
   }
 
+  if (_storage_config == StorageConfig::Header) {
+    return;  // validated, but not stored
+  }
   iter->second->emplaceSample(std::move(data));
 }
 bool DataContainer::isValidDataMessage(uint16_t msg_id, uint16_t payload_size) const
