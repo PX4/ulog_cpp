@@ -7,6 +7,7 @@ Checks: >
   modernize-*,
   performance-*,
   portability-*,
+  -portability-avoid-pragma-once,
   readability-*,
   -google-readability-braces-around-statements,
   -google-readability-todo,
