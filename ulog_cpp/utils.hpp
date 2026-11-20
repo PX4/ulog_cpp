@@ -33,7 +33,7 @@ static inline ReturnType staticCastEnsureUnsignedChar(const OriginType& v)
 inline int strnlen(const uint8_t* ptr, int max_len)
 {
   int len = 0;
-  while ((*ptr != 0) && (len < max_len)) {
+  while ((len < max_len) && (*ptr != 0)) {
     ptr++;
     len++;
   }
