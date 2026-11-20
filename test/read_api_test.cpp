@@ -267,4 +267,34 @@ TEST_CASE("Write complicated, nested data format, then read it")
                   ulog_cpp::AccessException);
 }
 
+TEST_CASE("Read string values that fill the whole field or are empty")
+{
+  std::vector<uint8_t> written_data;
+  TestWriter writer([&](const uint8_t* data, int length) {
+    const int prev_size = written_data.size();
+    written_data.resize(written_data.size() + length);
+    memcpy(written_data.data() + prev_size, data, length);
+  });
+
+  // ULog strings carry no terminating zero, and PX4 logs contain empty ones (char[0])
+  writer.fileHeader(ulog_cpp::FileHeader{});
+  writer.messageInfo(ulog_cpp::MessageInfo{"empty", ""});
+  writer.messageInfo(ulog_cpp::MessageInfo{"full", "hello"});
+  writer.headerComplete();
+  CHECK_EQ(writer.num_errors, 0);
+
+  const auto data_container =
+      std::make_shared<ulog_cpp::DataContainer>(ulog_cpp::DataContainer::StorageConfig::FullLog);
+  ulog_cpp::Reader reader{data_container};
+  reader.readChunk(written_data.data(), written_data.size());
+  CHECK(data_container->parsingErrors().empty());
+  CHECK_FALSE(data_container->hadFatalError());
+
+  const auto& info = data_container->messageInfo();
+  CHECK_EQ(info.at("empty").field().arrayLength(), 0);
+  CHECK_EQ(info.at("empty").value().as<std::string>(), "");
+  CHECK_EQ(info.at("full").field().arrayLength(), 5);
+  CHECK_EQ(info.at("full").value().as<std::string>(), "hello");
+}
+
 TEST_SUITE_END();
