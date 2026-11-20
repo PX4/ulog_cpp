@@ -4,8 +4,10 @@
  ****************************************************************************/
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "data_handler_interface.hpp"
 
@@ -36,6 +38,8 @@ class Reader {
   void corruptionDetected();
   int appendToPartialBuffer(const uint8_t* data, int length);
   void tryToRecover(const uint8_t* data, int length);
+  void readMessages(const uint8_t* data, int length);
+  void startAppendedData();
 
   void readHeaderMessage(const uint8_t* message);
   void readDataMessage(const uint8_t* message);
@@ -63,6 +67,9 @@ class Reader {
                           ///< buffer data)
 
   ulog_file_header_s _file_header{};
+
+  std::vector<uint64_t> _appended_offsets;  ///< sorted file offsets where appended data starts
+  size_t _next_appended_offset_index{0};
 };
 
 }  // namespace ulog_cpp

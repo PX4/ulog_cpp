@@ -5,6 +5,8 @@
 
 #include "reader.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 
 #include "raw_messages.hpp"
@@ -76,6 +78,32 @@ void Reader::readChunk(const uint8_t* data, int length)
     _total_num_read += num_read;
   }
 
+  // Appended data starts at the stored offsets. The message at such an offset may have been cut, so
+  // read up to each offset separately and restart message parsing there.
+  while (length > 0 && _state != State::InvalidData &&
+         _next_appended_offset_index < _appended_offsets.size()) {
+    const uint64_t offset = _appended_offsets[_next_appended_offset_index];
+    const auto num_read = static_cast<uint64_t>(_total_num_read);
+    if (offset > num_read) {
+      const int num_until_offset =
+          static_cast<int>(std::min<uint64_t>(offset - num_read, static_cast<uint64_t>(length)));
+      readMessages(data, num_until_offset);
+      data += num_until_offset;
+      length -= num_until_offset;
+    }
+    if (static_cast<uint64_t>(_total_num_read) >= offset) {
+      startAppendedData();
+      ++_next_appended_offset_index;
+    }
+  }
+
+  if (length > 0 && _state != State::InvalidData) {
+    readMessages(data, length);
+  }
+}
+
+void Reader::readMessages(const uint8_t* data, int length)
+{
   static constexpr int kULogHeaderLength = static_cast<int>(sizeof(ulog_message_header_s));
 
   while (length > 0 && !_need_recovery) {
@@ -251,13 +279,26 @@ void Reader::tryToRecover(const uint8_t* data, int length)
             "%i: recovered, recursive call (index = %i, length = %i, partial buf len = %i)\n",
             _total_num_read, index, length, _partial_message_buffer_length);
         _need_recovery = false;
-        readChunk(data, length);
+        readMessages(data, length);
 
         return;
       }
       DBG_PRINTF("%i: no valid msg found (length = %i, partial buf len = %i)\n", _total_num_read,
                  length, _partial_message_buffer_length);
     }
+  }
+}
+
+void Reader::startAppendedData()
+{
+  DBG_PRINTF("%i: start of appended data\n", _total_num_read);
+  // Discard the message that was cut at the offset (if any) and any data kept for recovery
+  _partial_message_buffer_length = 0;
+  _need_recovery = false;
+  if (_state == State::ReadHeader) {
+    // Appended data contains messages of the Data section
+    _state = State::ReadData;
+    _data_handler_interface->headerComplete();
   }
 }
 
@@ -318,11 +359,25 @@ int Reader::readFlagBits(const uint8_t* data, int length)
       reinterpret_cast<const ulog_message_flag_bits_s*>(data);
   if (static_cast<ULogMessageType>(flag_bits->msg_type) == ULogMessageType::FLAG_BITS) {
     // This is expected to be the first message after the file magic
-    if (flag_bits->appended_offsets[0] != 0) {
-      // TODO: handle appended data
-      _data_handler_interface->error("File contains appended offsets - this is not supported",
-                                     true);
+    // Appended data must start after the flag bits message
+    const uint64_t data_start =
+        static_cast<uint64_t>(_total_num_read) + flag_bits->msg_size + ULOG_MSG_HEADER_LEN;
+    for (size_t i = 0;
+         i < sizeof(flag_bits->appended_offsets) / sizeof(flag_bits->appended_offsets[0]); ++i) {
+      uint64_t offset = 0;
+      memcpy(&offset,
+             reinterpret_cast<const uint8_t*>(flag_bits) +
+                 offsetof(ulog_message_flag_bits_s, appended_offsets) + (i * sizeof(offset)),
+             sizeof(offset));
+      if (offset >= data_start) {
+        _appended_offsets.push_back(offset);
+      } else if (offset != 0) {
+        _data_handler_interface->error("Invalid appended data offset, ignoring it", true);
+      }
     }
+    std::sort(_appended_offsets.begin(), _appended_offsets.end());
+    _appended_offsets.erase(std::unique(_appended_offsets.begin(), _appended_offsets.end()),
+                            _appended_offsets.end());
     // Check incompat flags
     bool has_incompat_flags = false;
     if (flag_bits->incompat_flags[0] & ~(ULOG_INCOMPAT_FLAG0_DATA_APPENDED_MASK)) {
