@@ -4,6 +4,8 @@
  ****************************************************************************/
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <ulog_cpp/data_container.hpp>
 #include <ulog_cpp/reader.hpp>
@@ -263,6 +265,84 @@ TEST_CASE("ULog parsing - test corruption")
     // direct string access
     CHECK_EQ(sample["timestamp"].as<int>(), 32);
     CHECK_EQ(sample["x"].as<int>(), 49);
+  }
+}
+
+TEST_CASE("ULog parsing - appended data after a cut message")
+{
+  // A crash dump (e.g. PX4 hardfault_log) cuts the log, possibly in the middle of a message,
+  // and appends new messages at the offset stored in the flag bits.
+  for (const int cut_bytes : {0, 5}) {  // bytes of the cut message that stay in the file
+    for (const int chunk_size : {1, 7, 1 << 20}) {
+      CAPTURE(cut_bytes);
+      CAPTURE(chunk_size);
+
+      std::vector<uint8_t> written_data;
+      TestWriter writer([&](const uint8_t* data, int length) {
+        const int prev_size = written_data.size();
+        written_data.resize(written_data.size() + length);
+        memcpy(written_data.data() + prev_size, data, length);
+      });
+
+      const ulog_cpp::MessageFormat format{"message",
+                                           {{"uint64_t", "timestamp"}, {"uint16_t", "x"}}};
+      const uint16_t msg_id = 1;
+      auto make_data = [&](uint8_t value) {
+        std::vector<uint8_t> payload(10);
+        payload[0] = value;  // timestamp
+        payload[8] = value;  // x
+        return ulog_cpp::Data{msg_id, payload};
+      };
+      const ulog_cpp::Data data_before_cut = make_data(1);
+      const ulog_cpp::Data data_cut = make_data(2);
+      const ulog_cpp::Data data_appended = make_data(3);
+      const ulog_cpp::Logging logging{ulog_cpp::Logging::Level::Emergency, "appended", 4'000};
+
+      writer.fileHeader(ulog_cpp::FileHeader{});
+      writer.messageFormat(format);
+      writer.headerComplete();
+      writer.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, msg_id, "message"});
+      writer.data(data_before_cut);
+
+      // Write a message, then cut the file after 'cut_bytes' of it
+      const size_t cut_message_start = written_data.size();
+      writer.data(data_cut);
+      written_data.resize(cut_message_start + cut_bytes);
+      const uint64_t appended_offset = written_data.size();
+
+      writer.logging(logging);
+      writer.data(data_appended);
+      REQUIRE_EQ(writer.num_errors, 0);
+
+      // Set the appended data flag and offset in the flag bits message
+      const size_t flag_bits_start = sizeof(ulog_cpp::ulog_file_header_s);
+      written_data[flag_bits_start +
+                   offsetof(ulog_cpp::ulog_message_flag_bits_s, incompat_flags)] |=
+          ULOG_INCOMPAT_FLAG0_DATA_APPENDED_MASK;
+      memcpy(written_data.data() + flag_bits_start +
+                 offsetof(ulog_cpp::ulog_message_flag_bits_s, appended_offsets),
+             &appended_offset, sizeof(appended_offset));
+
+      const auto data_container = std::make_shared<ulog_cpp::DataContainer>(
+          ulog_cpp::DataContainer::StorageConfig::FullLog);
+      ulog_cpp::Reader reader{data_container};
+      // The reader expects the file header and flag bits in the first chunk
+      const size_t header_size = flag_bits_start + sizeof(ulog_cpp::ulog_message_flag_bits_s);
+      reader.readChunk(written_data.data(), static_cast<int>(header_size));
+      for (size_t i = header_size; i < written_data.size(); i += chunk_size) {
+        const int length = std::min<int>(chunk_size, static_cast<int>(written_data.size() - i));
+        reader.readChunk(written_data.data() + i, length);
+      }
+
+      CHECK(data_container->parsingErrors().empty());
+      CHECK_FALSE(data_container->hadFatalError());
+      REQUIRE_EQ(data_container->logging().size(), 1);
+      CHECK_EQ(logging, data_container->logging()[0]);
+      const auto& samples = data_container->subscriptionsByMessageId().at(msg_id)->rawSamples();
+      REQUIRE_EQ(samples.size(), 2);
+      CHECK_EQ(data_before_cut, samples[0]);
+      CHECK_EQ(data_appended, samples[1]);
+    }
   }
 }
 
