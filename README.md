@@ -7,8 +7,6 @@ Streamed C++ [ULog](https://docs.px4.io/main/en/dev_log/ulog_file_format.html) r
 - Pure C++17 without additional dependencies (`SimpleWriter` requires platform-specific `fsync`/`FlushFileBuffers`).
 - The reader is ~10 times as fast compared to the [python implementation](https://github.com/PX4/pyulog).
   However, the API is more low-level, and if you're just looking for an easy-to-use parsing library, use pyulog.
-- Unsupported ULog features:
-  - Appended data (`DATA_APPENDED`)
 - A little endian target machine is required (an error is thrown if this is not the case)
 - The reader keeps errors stored, so parsing can be continued and any errors can be read out at the end.
   The writer directly throws exceptions (`ulog_cpp::ExceptionBase`).
